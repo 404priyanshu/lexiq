@@ -27,6 +27,18 @@ class Settings(BaseSettings):
     chunk_overlap_tokens: int = 64
     embed_batch_size: int = 32
 
+    # Retrieval. Candidates from each first-stage list are fused with RRF; the top
+    # `rerank_candidates` go through the cross-encoder; `top_k` are returned.
+    lexical_k: int = 50
+    dense_k: int = 50
+    hnsw_ef_search: int = 100
+    rrf_k: int = 60
+    rerank_candidates: int = 30
+    top_k: int = 8
+    # Abstain when the best reranked passage's sigmoid(logit) is below this. Provisional;
+    # calibrated against the golden set's unanswerable questions in Phase 5.
+    abstain_min_relevance: float = 0.1
+
     cors_origins: list[str] = ["http://localhost:3000"]
 
 

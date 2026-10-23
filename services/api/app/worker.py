@@ -8,7 +8,9 @@ from arq.connections import RedisSettings
 from app.config import get_settings
 from app.db import SessionLocal, engine
 from app.ingest.pipeline import Models, ingest_document
-from app.ml.embedder import Embedder, load_tokenizer
+from app.ml.embedder import Embedder
+from app.ml.registry import EMBEDDER
+from app.ml.runtime import load_tokenizer
 
 INGEST_JOB = "ingest"
 
@@ -22,7 +24,7 @@ async def startup(ctx: dict) -> None:
     logging.basicConfig(level=logging.INFO)
     s = get_settings()
     ctx["models"] = Models(
-        embedder=Embedder(batch_size=s.embed_batch_size), tokenizer=load_tokenizer()
+        embedder=Embedder(batch_size=s.embed_batch_size), tokenizer=load_tokenizer(EMBEDDER)
     )
 
 

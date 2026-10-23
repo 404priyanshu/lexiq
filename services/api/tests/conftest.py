@@ -25,7 +25,10 @@ from app.config import API_ROOT, get_settings  # noqa: E402
 from app.db import engine  # noqa: E402
 from app.ingest.pipeline import Models  # noqa: E402
 from app.main import app, lifespan  # noqa: E402
-from app.ml.embedder import Embedder, load_tokenizer, model_path_exists  # noqa: E402
+from app.ml.embedder import Embedder  # noqa: E402
+from app.ml.registry import EMBEDDER, RERANKER  # noqa: E402
+from app.ml.reranker import Reranker  # noqa: E402
+from app.ml.runtime import load_tokenizer, model_path_exists  # noqa: E402
 
 
 async def _ensure_database(url: str) -> None:
@@ -64,6 +67,13 @@ async def client():
 
 @pytest.fixture(scope="session")
 def models() -> Models:
-    if not model_path_exists():
+    if not model_path_exists(EMBEDDER):
         pytest.skip("embedder not downloaded (uv run python -m app.ml.download)")
-    return Models(embedder=Embedder(), tokenizer=load_tokenizer())
+    return Models(embedder=Embedder(), tokenizer=load_tokenizer(EMBEDDER))
+
+
+@pytest.fixture(scope="session")
+def reranker() -> Reranker:
+    if not model_path_exists(RERANKER):
+        pytest.skip("reranker not downloaded (uv run python -m app.ml.download)")
+    return Reranker()

@@ -27,4 +27,12 @@ EMBEDDER = ModelSpec(
     onnx_file="onnx/model.onnx",
 )
 
-ALL_MODELS = (EMBEDDER,)
+RERANKER = ModelSpec(
+    name="ms-marco-MiniLM-L6-v2",
+    repo_id="cross-encoder/ms-marco-MiniLM-L6-v2",
+    revision="233902d25c440f23af6f7d6e94d2946bac0bee0a",
+    files=("onnx/model.onnx", "tokenizer.json", "config.json"),
+    onnx_file="onnx/model.onnx",
+)
+
+ALL_MODELS = (EMBEDDER, RERANKER)
