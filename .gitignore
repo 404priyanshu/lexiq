@@ -1,0 +1,35 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Model weights (downloaded by script, never committed)
+services/api/models/*
+!services/api/models/.gitkeep
+
+# Data / corpora / eval outputs
+data/
+evals/runs/
+bench/results/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
