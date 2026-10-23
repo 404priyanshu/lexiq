@@ -1,17 +1,19 @@
 from contextlib import asynccontextmanager
 
+from arq import create_pool
+from arq.connections import RedisSettings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from redis.asyncio import Redis
 
 from app.config import get_settings
 from app.db import engine
-from app.routes import health
+from app.routes import documents, health
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.redis = Redis.from_url(get_settings().redis_url, decode_responses=True)
+    # ArqRedis is a redis.asyncio.Redis that can also enqueue jobs.
+    app.state.redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
     yield
     await app.state.redis.aclose()
     await engine.dispose()
@@ -25,3 +27,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(health.router)
+app.include_router(documents.router)
