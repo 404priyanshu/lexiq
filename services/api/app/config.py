@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -38,6 +39,15 @@ class Settings(BaseSettings):
     # Abstain when the best reranked passage's sigmoid(logit) is below this. Provisional;
     # calibrated against the golden set's unanswerable questions in Phase 5.
     abstain_min_relevance: float = 0.1
+
+    # Generation. Read from .env here (not os.environ), so it's passed to the client explicitly.
+    anthropic_api_key: SecretStr | None = None
+    llm_model: str = "claude-opus-5-5"
+    # Grounded QA over a handful of passages is latency-sensitive and needs little reasoning.
+    llm_effort: str = "low"
+    # Includes adaptive thinking tokens, so leave headroom above the visible answer.
+    llm_max_tokens: int = 16000
+    llm_fallbacks: bool = True
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
