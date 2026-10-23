@@ -6,7 +6,7 @@ import time
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import delete, insert
+from sqlalchemy import delete, insert, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from tokenizers import Tokenizer
 
@@ -83,10 +83,16 @@ async def ingest_document(session: AsyncSession, document_id: uuid.UUID, models:
     except Exception as exc:
         log.exception("ingest failed for %s", document_id)
         await session.rollback()
-        doc = await session.get(Document, document_id)
-        doc.status = DocumentStatus.failed
-        doc.error = f"{type(exc).__name__}: {exc}"[:2000]
+        # A direct UPDATE, not the (now stale) ORM object: if the document was deleted
+        # meanwhile, nothing matches and there's nothing left to mark failed.
+        marked = await session.execute(
+            update(Document)
+            .where(Document.id == document_id)
+            .values(status=DocumentStatus.failed, error=f"{type(exc).__name__}: {exc}"[:2000])
+        )
         await session.commit()
+        if marked.rowcount == 0:
+            log.warning("ingest: document %s was deleted while ingesting", document_id)
         return
 
     log.info(

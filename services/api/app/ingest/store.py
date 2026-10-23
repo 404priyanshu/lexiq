@@ -46,6 +46,10 @@ async def register_document(
     except IntegrityError:
         # Lost a race with a concurrent upload of the same bytes.
         await session.rollback()
-        return await session.scalar(select(Document).where(Document.sha256 == sha)), False
+        winner = await session.scalar(select(Document).where(Document.sha256 == sha))
+        if winner is None:
+            # The other upload's row was deleted before we could read it.
+            raise RuntimeError(f"document {sha} vanished after a concurrent upload") from None
+        return winner, False
     await session.refresh(doc)
     return doc, True

@@ -86,3 +86,44 @@ async def test_rejects_bad_uploads(client, name, data, code):
 
 async def test_unknown_document_is_404(client):
     assert (await client.get(f"/documents/{uuid.uuid4()}")).status_code == 404
+
+
+async def test_document_deleted_during_failed_ingest_is_not_an_error(client, models, monkeypatch):
+    import asyncio
+
+    from app.ingest import pipeline
+    from app.models import Document
+
+    doc_id = uuid.UUID((await upload(client, make_pdf(PAGES))).json()["id"])
+    loop = asyncio.get_running_loop()
+
+    async def delete_doc():
+        async with SessionLocal() as other:
+            await other.delete(await other.get(Document, doc_id))
+            await other.commit()
+
+    def prepare_then_fail(doc, _models):
+        # Runs in a worker thread: delete the row from the event loop, then fail.
+        asyncio.run_coroutine_threadsafe(delete_doc(), loop).result()
+        raise ValueError("parse failed")
+
+    monkeypatch.setattr(pipeline, "_prepare", prepare_then_fail)
+    async with SessionLocal() as session:
+        await ingest_document(session, doc_id, models)  # must not raise
+
+    assert (await client.get(f"/documents/{doc_id}")).status_code == 404
+
+
+async def test_upload_race_with_vanished_winner_raises_clearly(monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+
+    from app.ingest.store import register_document
+
+    async with SessionLocal() as session:
+
+        async def lost_race():
+            raise IntegrityError("insert", {}, Exception("duplicate sha256"))
+
+        monkeypatch.setattr(session, "commit", lost_race)
+        with pytest.raises(RuntimeError, match="vanished"):
+            await register_document(session, b"race bytes", title="t", mime_type="text/plain")

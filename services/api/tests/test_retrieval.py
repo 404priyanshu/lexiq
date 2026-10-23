@@ -143,3 +143,19 @@ async def test_search_endpoint(client, corpus):
 @pytest.mark.parametrize("payload", [{"query": "   "}, {"query": "x", "top_k": 0}, {}])
 async def test_search_rejects_bad_requests(client, payload):
     assert (await client.post("/search", json=payload)).status_code == 422
+
+
+async def test_candidates_deleted_mid_query_abstain_instead_of_crashing(
+    corpus, retriever, monkeypatch
+):
+    # Both first-stage searches return a chunk id that no longer exists by load time.
+    async def gone(*_args, **_kwargs):
+        return [987_654_321]
+
+    monkeypatch.setattr("app.retrieval.retriever.bm25_search", gone)
+    monkeypatch.setattr("app.retrieval.retriever.dense_search", gone)
+
+    result = await retriever.retrieve("anything")
+
+    assert result.abstained and result.chunks == []
+    assert result.abstain_reason == "no candidates"

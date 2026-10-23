@@ -143,3 +143,21 @@ def test_gate_lower_is_better_metrics_fail_on_rise():
         "value": 0.01, "tolerance": 0.01, "direction": "lower"}}}  # fmt: skip
     assert check({"retrieval_abstain": {"false_abstain_rate": 0.015}}, baseline)[0]
     assert not check({"retrieval_abstain": {"false_abstain_rate": 0.05}}, baseline)[0]
+
+
+@pytest.mark.parametrize("answerable", [True, False])
+def test_one_sided_subsets_report_none_instead_of_crashing(answerable, capsys):
+    from app.evals.run import print_summary
+
+    rows = [row(2 if answerable else None, answerable=answerable) for _ in range(3)]
+    s = summarize(rows, abstain_threshold=0.1)
+    print_summary(s)
+
+    rates = s["retrieval_abstain"]
+    if answerable:
+        assert s["retrieval"]["recall@5"] == 1.0
+        assert rates["unanswerable_abstain_rate"] is None
+    else:
+        assert s["retrieval"]["recall@5"] is None and s["retrieval"]["mrr@10"] is None
+        assert rates["false_abstain_rate"] is None
+    assert "n/a" in capsys.readouterr().out

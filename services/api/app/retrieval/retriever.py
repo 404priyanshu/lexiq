@@ -47,6 +47,7 @@ class _Timer:
 
     def __enter__(self):
         self.start = time.perf_counter()
+        return self
 
     def __exit__(self, *exc):
         self.timings[self.name] = round((time.perf_counter() - self.start) * 1000, 1)
@@ -96,6 +97,9 @@ class Retriever:
                 rows = (await conn.execute(_LOAD_CHUNKS, {"ids": [cid for cid, _ in fused]})).all()
         by_id = {r.id: r for r in rows}
         fused = [(cid, score) for cid, score in fused if cid in by_id]  # deleted mid-query
+        if not fused:
+            t["total"] = _ms_since(started)
+            return RetrievalResult(query, [], True, "no candidates", 0, t)
 
         with _Timer(t, "rerank"):
             logits = await asyncio.to_thread(

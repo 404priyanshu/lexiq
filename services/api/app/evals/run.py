@@ -61,8 +61,8 @@ def _rank_by(result: RetrievalResult, key) -> list[str]:
     return [c.content for c in sorted(ranked, key=key)]
 
 
-def _recall(ranks: list[int | None], k: int) -> float:
-    return sum(1 for r in ranks if r is not None and r <= k) / len(ranks) if ranks else 0.0
+def _recall(ranks: list[int | None], k: int) -> float | None:
+    return _rate(ranks, lambda r: r is not None and r <= k)
 
 
 def _pct(values: list[float], q: float) -> float:
@@ -170,23 +170,24 @@ def summarize(rows: list[dict], abstain_threshold: float) -> dict:
     ranks = {m: [r["rank"][m] for r in answerable] for m in ("rerank", "rrf", "bm25", "dense")}
     final = ranks["rerank"]
 
-    retrieval = {f"recall@{k}": round(_recall(final, k), 4) for k in RECALL_KS} | {
-        "mrr@10": round(sum(1 / r for r in final if r and r <= 10) / len(final), 4),
-        "candidate_recall": round(_recall(final, 10**6), 4),
-        "ablation_recall@5": {m: round(_recall(v, 5), 4) for m, v in ranks.items()},
+    retrieval = {f"recall@{k}": _recall(final, k) for k in RECALL_KS} | {
+        "mrr@10": round(sum(1 / r for r in final if r and r <= 10) / len(final), 4)
+        if final
+        else None,
+        "candidate_recall": _recall(final, 10**6),
+        "ablation_recall@5": {m: _recall(v, 5) for m, v in ranks.items()},
         "latency_ms": {
             "p50": _pct([r["retrieval_ms"] for r in rows], 50),
             "p95": _pct([r["retrieval_ms"] for r in rows], 95),
         },
     }
 
+    # Rates are None when a subset (e.g. --limit) has no questions of that kind.
     def abstain_rates(threshold: float) -> dict:
         return {
-            "false_abstain_rate": round(
-                sum(r["top_relevance"] < threshold for r in answerable) / len(answerable), 4
-            ),
-            "unanswerable_abstain_rate": round(
-                sum(r["top_relevance"] < threshold for r in unanswerable) / len(unanswerable), 4
+            "false_abstain_rate": _rate(answerable, lambda r: r["top_relevance"] < threshold),
+            "unanswerable_abstain_rate": _rate(
+                unanswerable, lambda r: r["top_relevance"] < threshold
             ),
         }
 
@@ -201,9 +202,7 @@ def summarize(rows: list[dict], abstain_threshold: float) -> dict:
             "sweep": {str(t): abstain_rates(t) for t in ABSTAIN_SWEEP},
         },
         "by_category_recall@5": {
-            cat: round(
-                _recall([r["rank"]["rerank"] for r in answerable if r["category"] == cat], 5), 3
-            )
+            cat: _recall([r["rank"]["rerank"] for r in answerable if r["category"] == cat], 5)
             for cat in sorted({r["category"] for r in answerable})
         },
     }
@@ -256,17 +255,21 @@ def summarize_answers(rows: list[dict]) -> dict:
     }
 
 
+def _f(x: float | None) -> str:
+    return "n/a" if x is None else f"{x:.3f}"
+
+
 def print_summary(summary: dict) -> None:
     r = summary["retrieval"]
     print(f"\n{summary['questions']} questions ({summary['answerable']} answerable)")
-    print("retrieval   " + "  ".join(f"recall@{k} {r[f'recall@{k}']:.3f}" for k in RECALL_KS))
-    print(f"            mrr@10 {r['mrr@10']:.3f}  candidate recall {r['candidate_recall']:.3f}")
-    print("ablation    " + "  ".join(f"{m} {v:.3f}" for m, v in r["ablation_recall@5"].items()))
+    print("retrieval   " + "  ".join(f"recall@{k} {_f(r[f'recall@{k}'])}" for k in RECALL_KS))
+    print(f"            mrr@10 {_f(r['mrr@10'])}  candidate recall {_f(r['candidate_recall'])}")
+    print("ablation    " + "  ".join(f"{m} {_f(v)}" for m, v in r["ablation_recall@5"].items()))
     print(f"latency     p50 {r['latency_ms']['p50']} ms  p95 {r['latency_ms']['p95']} ms")
     a = summary["retrieval_abstain"]
     print(
-        f"abstain     @{a['threshold']}: false-abstain {a['false_abstain_rate']:.3f}, "
-        f"unanswerable caught {a['unanswerable_abstain_rate']:.3f}"
+        f"abstain     @{a['threshold']}: false-abstain {_f(a['false_abstain_rate'])}, "
+        f"unanswerable caught {_f(a['unanswerable_abstain_rate'])}"
     )
     if "answers" in summary:
         print("answers     " + json.dumps(summary["answers"]))
