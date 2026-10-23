@@ -1,0 +1,41 @@
+{
+  "metrics": {
+    "retrieval.recall@1": {
+      "value": 0.4518,
+      "tolerance": 0.03
+    },
+    "retrieval.recall@5": {
+      "value": 0.7647,
+      "tolerance": 0.02
+    },
+    "retrieval.recall@8": {
+      "value": 0.8259,
+      "tolerance": 0.02
+    },
+    "retrieval.mrr@10": {
+      "value": 0.5861,
+      "tolerance": 0.02
+    },
+    "retrieval_abstain.false_abstain_rate": {
+      "value": 0.0118,
+      "tolerance": 0.01,
+      "direction": "lower"
+    },
+    "answers.faithfulness": {
+      "value": null,
+      "tolerance": 0.03
+    },
+    "answers.answer_correctness": {
+      "value": null,
+      "tolerance": 0.05
+    },
+    "answers.abstain_recall": {
+      "value": null,
+      "tolerance": 0.1
+    },
+    "answers.citation_valid_rate": {
+      "value": null,
+      "tolerance": 0.02
+    }
+  }
+}

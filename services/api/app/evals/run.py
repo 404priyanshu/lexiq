@@ -1,0 +1,301 @@
+"""Run the golden-set eval and write evals/runs/<timestamp>/{results.jsonl,summary.json}.
+
+Retrieval metrics run on every question and need no API key. With --answers N, the first N
+questions (the golden file is pre-shuffled, so this is a stable mixed subset) also go through
+generation and the LLM judge.
+
+Usage:
+  uv run python -m app.evals.run                    # retrieval, all 500 questions
+  uv run python -m app.evals.run --answers 100      # + generation and judge on 100
+"""
+
+import argparse
+import asyncio
+import json
+import statistics
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+
+from anthropic import AsyncAnthropic
+
+from app.config import REPO_ROOT, get_settings
+from app.db import engine
+from app.evals.corpus import document_ids_by_sha, load_corpus
+from app.evals.golden import GOLDEN_PATH
+from app.evals.judge import Judge
+from app.evals.matching import first_hit
+from app.generation.generator import ClaudeGenerator
+from app.generation.service import answer_events
+from app.ml.embedder import Embedder
+from app.ml.reranker import Reranker
+from app.models import DocumentStatus
+from app.retrieval.retriever import RetrievalResult, Retriever
+
+RUNS_DIR = REPO_ROOT / "evals" / "runs"
+RECALL_KS = (1, 3, 5, 8)
+ABSTAIN_SWEEP = (0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.3)
+_T0 = time.perf_counter()
+
+
+def log(msg: str) -> None:
+    print(f"[{time.perf_counter() - _T0:6.1f}s] {msg}", flush=True)
+
+
+class _Replay:
+    """Retriever stand-in that hands answer_events the retrieval we already ran."""
+
+    def __init__(self, result: RetrievalResult, top_k: int):
+        self.result, self.top_k = result, top_k
+
+    async def retrieve(self, *_args, **_kwargs) -> RetrievalResult:
+        r = self.result
+        return RetrievalResult(
+            r.query, r.chunks[: self.top_k], r.abstained, r.abstain_reason, r.candidates,
+            r.timings_ms,
+        )  # fmt: skip
+
+
+def _rank_by(result: RetrievalResult, key) -> list[str]:
+    ranked = [c for c in result.chunks if key(c) is not None]
+    return [c.content for c in sorted(ranked, key=key)]
+
+
+def _recall(ranks: list[int | None], k: int) -> float:
+    return sum(1 for r in ranks if r is not None and r <= k) / len(ranks) if ranks else 0.0
+
+
+def _pct(values: list[float], q: float) -> float:
+    return round(statistics.quantiles(values, n=100)[int(q) - 1], 1) if len(values) > 1 else 0.0
+
+
+async def evaluate(
+    answer_limit: int, concurrency: int, limit: int | None = None
+) -> tuple[list[dict], dict]:
+    s = get_settings()
+    golden = [json.loads(line) for line in GOLDEN_PATH.read_text().splitlines()][:limit]
+    docs = await document_ids_by_sha()
+    doc_for = {}
+    for d in load_corpus():
+        doc_id, status = docs.get(d["sha256"], (None, None))
+        if status != DocumentStatus.ready:
+            raise SystemExit(f"corpus not ingested: {d['contract']} (run app.evals.corpus)")
+        doc_for[d["contract"]] = doc_id
+
+    log(f"loading models for {len(golden)} questions")
+    retriever = Retriever(engine, Embedder(), Reranker(), s)
+    generator = judge = None
+    if answer_limit:
+        key = s.anthropic_api_key.get_secret_value() if s.anthropic_api_key else ""
+        if not key:
+            raise SystemExit("--answers needs ANTHROPIC_API_KEY")
+        client = AsyncAnthropic(api_key=key)
+        generator = ClaudeGenerator(client, s)
+        judge = Judge(client, s.judge_model)
+
+    sem = asyncio.Semaphore(concurrency)
+    done_count = 0
+    started = time.perf_counter()
+
+    async def one(i: int, g: dict) -> dict:
+        nonlocal done_count
+        async with sem:
+            # Ask for every reranked candidate so recall@k can be read at any k.
+            res = await retriever.retrieve(
+                g["question"], top_k=s.rerank_candidates, document_ids=[doc_for[g["contract"]]]
+            )
+        done_count += 1
+        if res.timings_ms.get("total", 0) > 3000:
+            log(f"slow retrieval {g['id']}: {res.timings_ms}")
+        if done_count % 25 == 0 or done_count == len(golden):
+            rate = done_count / (time.perf_counter() - started)
+            log(f"retrieved {done_count}/{len(golden)} ({rate:.1f} q/s)")
+        row = {
+            "id": g["id"],
+            "category": g["category"],
+            "answerable": g["answerable"],
+            "top_relevance": res.chunks[0].relevance if res.chunks else 0.0,
+            "retrieval_abstained": res.abstained,
+            "retrieval_ms": res.timings_ms.get("total"),
+        }
+        if g["answerable"]:
+            row["rank"] = {
+                "rerank": first_hit(g["evidence"], [c.content for c in res.chunks]),
+                "rrf": first_hit(g["evidence"], _rank_by(res, lambda c: -c.rrf_score)),
+                "bm25": first_hit(g["evidence"], _rank_by(res, lambda c: c.bm25_rank)),
+                "dense": first_hit(g["evidence"], _rank_by(res, lambda c: c.dense_rank)),
+            }
+        if generator and i < answer_limit:
+            row["generation"] = await generate_and_judge(g, res)
+        return row
+
+    async def generate_and_judge(g: dict, res: RetrievalResult) -> dict:
+        async with sem:
+            events = [
+                e
+                async for e in answer_events(
+                    _Replay(res, s.top_k), generator, g["question"], s.top_k
+                )
+            ]
+        sources = res.chunks[: s.top_k]
+        done = next(data for name, data in events if name == "done")
+        out = {
+            "answer": done["answer"],
+            "abstained": done["abstained"],
+            "refused": done["refused"],
+            "citations": done["citations"],
+            "usage": done["usage"],
+            "ttft_ms": done["timings_ms"].get("ttft"),
+            "total_ms": done["timings_ms"].get("total"),
+        }
+        if done["answer"]:
+            async with sem:
+                verdict, usage = await judge.grade(
+                    g["question"], sources, done["answer"], g["evidence"]
+                )
+            out["judge"] = verdict.model_dump() if verdict else None
+            out["judge_usage"] = usage
+        return out
+
+    rows = await asyncio.gather(*(one(i, g) for i, g in enumerate(golden)))
+    log("all questions done")
+    summary = summarize(rows, s.abstain_min_relevance)
+    summary["elapsed_s"] = round(time.perf_counter() - started, 1)
+    return rows, summary
+
+
+def summarize(rows: list[dict], abstain_threshold: float) -> dict:
+    answerable = [r for r in rows if r["answerable"]]
+    unanswerable = [r for r in rows if not r["answerable"]]
+    ranks = {m: [r["rank"][m] for r in answerable] for m in ("rerank", "rrf", "bm25", "dense")}
+    final = ranks["rerank"]
+
+    retrieval = {f"recall@{k}": round(_recall(final, k), 4) for k in RECALL_KS} | {
+        "mrr@10": round(sum(1 / r for r in final if r and r <= 10) / len(final), 4),
+        "candidate_recall": round(_recall(final, 10**6), 4),
+        "ablation_recall@5": {m: round(_recall(v, 5), 4) for m, v in ranks.items()},
+        "latency_ms": {
+            "p50": _pct([r["retrieval_ms"] for r in rows], 50),
+            "p95": _pct([r["retrieval_ms"] for r in rows], 95),
+        },
+    }
+
+    def abstain_rates(threshold: float) -> dict:
+        return {
+            "false_abstain_rate": round(
+                sum(r["top_relevance"] < threshold for r in answerable) / len(answerable), 4
+            ),
+            "unanswerable_abstain_rate": round(
+                sum(r["top_relevance"] < threshold for r in unanswerable) / len(unanswerable), 4
+            ),
+        }
+
+    summary = {
+        "questions": len(rows),
+        "answerable": len(answerable),
+        "unanswerable": len(unanswerable),
+        "retrieval": retrieval,
+        "retrieval_abstain": abstain_rates(abstain_threshold)
+        | {
+            "threshold": abstain_threshold,
+            "sweep": {str(t): abstain_rates(t) for t in ABSTAIN_SWEEP},
+        },
+        "by_category_recall@5": {
+            cat: round(
+                _recall([r["rank"]["rerank"] for r in answerable if r["category"] == cat], 5), 3
+            )
+            for cat in sorted({r["category"] for r in answerable})
+        },
+    }
+
+    gen = [r for r in rows if "generation" in r]
+    if gen:
+        summary["answers"] = summarize_answers(gen)
+    return summary
+
+
+def _rate(items: list, pred) -> float | None:
+    return round(sum(1 for x in items if pred(x)) / len(items), 4) if items else None
+
+
+def summarize_answers(rows: list[dict]) -> dict:
+    gens = [r["generation"] for r in rows]
+    judged = [g["judge"] for g in gens if g.get("judge")]
+    cited = [g["citations"] for g in gens if g["citations"]]
+    usage = [g["usage"] for g in gens if g["usage"]]
+    totals = [g["total_ms"] for g in gens if g["total_ms"]]
+
+    def abstained(r: dict) -> bool:
+        g = r["generation"]
+        return g["abstained"] or bool(g.get("judge") and g["judge"]["declined"])
+
+    def correct(r: dict) -> bool:
+        j = r["generation"].get("judge")
+        return bool(j and j["answers_question"] and not j["declined"])
+
+    return {
+        "n": len(rows),
+        "faithfulness": _rate(judged, lambda j: j["faithful"]),
+        "answer_correctness": _rate([r for r in rows if r["answerable"]], correct),
+        "abstain_precision": _rate(
+            [r for r in rows if abstained(r)], lambda r: not r["answerable"]
+        ),
+        "abstain_recall": _rate([r for r in rows if not r["answerable"]], abstained),
+        "citation_valid_rate": _rate(cited, lambda c: not c["invalid"]),
+        "citation_coverage": round(statistics.mean(c["coverage"] for c in cited), 4)
+        if cited
+        else None,
+        "refusals": sum(g["refused"] for g in gens),
+        "latency_ms": {"p50": _pct(totals, 50), "p95": _pct(totals, 95)} if totals else None,
+        "mean_tokens": {
+            "input": round(statistics.mean(u["input_tokens"] for u in usage)),
+            "output": round(statistics.mean(u["output_tokens"] for u in usage)),
+        }
+        if usage
+        else None,
+    }
+
+
+def print_summary(summary: dict) -> None:
+    r = summary["retrieval"]
+    print(f"\n{summary['questions']} questions ({summary['answerable']} answerable)")
+    print("retrieval   " + "  ".join(f"recall@{k} {r[f'recall@{k}']:.3f}" for k in RECALL_KS))
+    print(f"            mrr@10 {r['mrr@10']:.3f}  candidate recall {r['candidate_recall']:.3f}")
+    print("ablation    " + "  ".join(f"{m} {v:.3f}" for m, v in r["ablation_recall@5"].items()))
+    print(f"latency     p50 {r['latency_ms']['p50']} ms  p95 {r['latency_ms']['p95']} ms")
+    a = summary["retrieval_abstain"]
+    print(
+        f"abstain     @{a['threshold']}: false-abstain {a['false_abstain_rate']:.3f}, "
+        f"unanswerable caught {a['unanswerable_abstain_rate']:.3f}"
+    )
+    if "answers" in summary:
+        print("answers     " + json.dumps(summary["answers"]))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--answers", type=int, default=0, metavar="N")
+    parser.add_argument("--concurrency", type=int, default=2)
+    parser.add_argument("--limit", type=int, default=None, help="only the first N questions")
+    parser.add_argument("--out", type=Path, default=None)
+    args = parser.parse_args()
+
+    async def run():
+        try:
+            return await evaluate(args.answers, args.concurrency, args.limit)
+        finally:
+            await engine.dispose()
+
+    rows, summary = asyncio.run(run())
+    out = args.out or RUNS_DIR / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / "results.jsonl").open("w") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
+    (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    print_summary(summary)
+    print(f"\nwrote {out.relative_to(REPO_ROOT) if out.is_relative_to(REPO_ROOT) else out}")
+
+
+if __name__ == "__main__":
+    main()

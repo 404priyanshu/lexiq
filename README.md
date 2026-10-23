@@ -4,8 +4,8 @@ Eval-driven RAG platform for document QA: hybrid retrieval (BM25 + pgvector HNSW
 cross-encoder rerank, citation-grounded streaming answers, and an abstain path when
 evidence is insufficient. See [docs/PLAN.md](docs/PLAN.md) for the build plan.
 
-**Status:** Phase 4 (generation) — Claude answers from retrieved passages with `[n]`
-citations, streamed over SSE, with a web UI for upload and Q&A.
+**Status:** Phase 5 (evals) — a 500-question golden set from lawyer-annotated CUAD contracts
+scores retrieval and answers; CI blocks changes that regress it. See [evals/](evals/README.md).
 
 ## Stack
 
@@ -23,6 +23,8 @@ make api     # http://localhost:8000/health
 make worker  # ingestion jobs
 make web     # http://localhost:3000
 make test
+make eval-corpus   # once: fetch CUAD, ingest 98 eval contracts
+make eval          # golden-set retrieval metrics + regression gate
 ```
 
 Upload a document and watch it move `pending → processing → ready`:

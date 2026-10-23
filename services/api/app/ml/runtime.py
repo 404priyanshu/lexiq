@@ -27,6 +27,8 @@ def load_tokenizer(spec: ModelSpec) -> Tokenizer:
 def onnx_session(spec: ModelSpec) -> ort.InferenceSession:
     opts = ort.SessionOptions()
     opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    # Idle intra-op threads otherwise busy-wait, pinning every core between requests.
+    opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
     return ort.InferenceSession(
         str(spec.path / spec.onnx_file), opts, providers=["CPUExecutionProvider"]
     )

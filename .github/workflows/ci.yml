@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql+asyncpg://lexiq:lexiq@localhost:5433/lexiq
+  REDIS_URL: redis://localhost:6380/0
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  api:
+    name: API lint + tests
+    runs-on: ubuntu-latest
+    # Same ports as local dev (.env.example).
+    services:
+      postgres:
+        image: paradedb/paradedb:0.26.0-pg17
+        env:
+          POSTGRES_USER: lexiq
+          POSTGRES_PASSWORD: lexiq
+          POSTGRES_DB: lexiq
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U lexiq -d lexiq" --health-interval 5s --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:8.6.7-alpine
+        ports: ["6380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Cache ONNX models
+        uses: actions/cache@v4
+        with:
+          path: services/api/models
+          key: onnx-${{ hashFiles('services/api/app/ml/registry.py') }}
+      - run: uv sync --locked
+      - run: uv run python -m app.ml.download
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+
+  web:
+    name: Web lint + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm build
+
+  eval:
+    name: Golden-set eval gate
+    needs: api
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Same ports as local dev (.env.example).
+    services:
+      postgres:
+        image: paradedb/paradedb:0.26.0-pg17
+        env:
+          POSTGRES_USER: lexiq
+          POSTGRES_PASSWORD: lexiq
+          POSTGRES_DB: lexiq
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U lexiq -d lexiq" --health-interval 5s --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:8.6.7-alpine
+        ports: ["6380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
+    defaults:
+      run:
+        working-directory: services/api
+    env:
+      # Answer generation + LLM judge only run when the secret exists (never on fork PRs).
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # 100-question answer subset on PRs, all 500 on main.
+      ANSWERS: ${{ github.event_name == 'push' && '500' || '100' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Cache ONNX models
+        uses: actions/cache@v4
+        with:
+          path: services/api/models
+          key: onnx-${{ hashFiles('services/api/app/ml/registry.py') }}
+      - name: Cache CUAD
+        uses: actions/cache@v4
+        with:
+          path: data/cuad/CUAD_v1.zip
+          key: cuad-v1-${{ hashFiles('evals/corpus.json') }}
+      - run: uv sync --locked
+      - run: uv run python -m app.ml.download
+      - name: Fetch CUAD (checksum-verified)
+        working-directory: .
+        run: |
+          mkdir -p data/cuad
+          url=$(jq -r .url evals/corpus.json); md5=$(jq -r .zip_md5 evals/corpus.json)
+          [ -f data/cuad/CUAD_v1.zip ] || curl -sSfL -o data/cuad/CUAD_v1.zip "$url"
+          echo "$md5  data/cuad/CUAD_v1.zip" | md5sum -c -
+          unzip -q -o data/cuad/CUAD_v1.zip -d data/cuad/extracted
+      - run: uv run alembic upgrade head
+      - name: Ingest eval corpus
+        run: uv run python -m app.evals.corpus --cuad ../../data/cuad/extracted/CUAD_v1
+      - name: Run eval
+        run: |
+          answers=0
+          [ -n "$ANTHROPIC_API_KEY" ] && answers=$ANSWERS
+          uv run python -m app.evals.run --answers "$answers" --out ../../evals/runs/ci
+      - name: Gate against baseline
+        run: uv run python -m app.evals.gate ../../evals/runs/ci/summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-run
+          path: evals/runs/ci

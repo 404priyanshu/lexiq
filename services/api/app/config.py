@@ -36,9 +36,11 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     rerank_candidates: int = 30
     top_k: int = 8
-    # Abstain when the best reranked passage's sigmoid(logit) is below this. Provisional;
-    # calibrated against the golden set's unanswerable questions in Phase 5.
-    abstain_min_relevance: float = 0.1
+    # Abstain before generation when the best reranked passage's sigmoid(logit) is below this.
+    # Only a floor for clearly off-topic questions: on the CUAD golden set the reranker's score
+    # barely separates answerable from unanswerable questions (at 0.1 it refused 33% of
+    # answerable ones), so the model's INSUFFICIENT_EVIDENCE path does the real abstaining.
+    abstain_min_relevance: float = 0.0001
 
     # Generation. Read from .env here (not os.environ), so it's passed to the client explicitly.
     anthropic_api_key: SecretStr | None = None
@@ -48,6 +50,7 @@ class Settings(BaseSettings):
     # Includes adaptive thinking tokens, so leave headroom above the visible answer.
     llm_max_tokens: int = 16000
     llm_fallbacks: bool = True
+    judge_model: str = "claude-opus-5-5"
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
