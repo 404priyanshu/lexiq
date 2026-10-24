@@ -33,7 +33,11 @@ infra/               docker-compose: ParadeDB Postgres (pgvector + pg_search), R
 
 ## Decisions
 
-- Corpus: CUAD contracts (CC BY 4.0) + SEC EDGAR filings.
+- Corpus: CUAD contracts (CC BY 4.0) + Code of Federal Regulations from govinfo.gov (public
+  domain). CFR replaced SEC EDGAR, whose fair-access policy requires a contact email in every
+  request; the corpus reached 52,650 pages.
+- Golden set: built from CUAD's lawyer annotations rather than LLM-drafted questions, including
+  75 unanswerable questions where CUAD records a clause is absent.
 - BM25: ParadeDB `pg_search` (real BM25), not Postgres `ts_rank`.
 - LLM: Claude via the Anthropic SDK, model set in config.
 - CI: retrieval metrics on all 500 questions every PR; LLM-judge faithfulness on a fixed

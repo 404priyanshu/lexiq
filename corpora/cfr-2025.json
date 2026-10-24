@@ -1,0 +1,466 @@
+{
+  "source": "Code of Federal Regulations (annual edition), govinfo.gov",
+  "license": "US government work, public domain",
+  "year": 2025,
+  "documents": [
+    {
+      "title": 12,
+      "volume": 1,
+      "name": "2025 CFR Title 12, Volume 1",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol1/pdf/CFR-2025-title12-vol1.pdf",
+      "file": "CFR-2025-title12-vol1.pdf",
+      "sha256": "f2098271a1cb62cc2e4e007f04e3d82e13a065c25f63c350423872cb2dad2667",
+      "pages": 1234
+    },
+    {
+      "title": 12,
+      "volume": 2,
+      "name": "2025 CFR Title 12, Volume 2",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol2/pdf/CFR-2025-title12-vol2.pdf",
+      "file": "CFR-2025-title12-vol2.pdf",
+      "sha256": "504ad3bd2db4bf729888ab92302ed34028efa66babc402d1da0b0b4fb9868e18",
+      "pages": 723
+    },
+    {
+      "title": 12,
+      "volume": 3,
+      "name": "2025 CFR Title 12, Volume 3",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol3/pdf/CFR-2025-title12-vol3.pdf",
+      "file": "CFR-2025-title12-vol3.pdf",
+      "sha256": "a8b38bd6b174309abf41bbb507d61abc244a38f408f1ad84fae38a2e889b3db3",
+      "pages": 1128
+    },
+    {
+      "title": 12,
+      "volume": 4,
+      "name": "2025 CFR Title 12, Volume 4",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol4/pdf/CFR-2025-title12-vol4.pdf",
+      "file": "CFR-2025-title12-vol4.pdf",
+      "sha256": "0f3ba69f0db645daa5c9da5f02f4868c6d486f95d432d8cda2c91f84315112a5",
+      "pages": 919
+    },
+    {
+      "title": 12,
+      "volume": 5,
+      "name": "2025 CFR Title 12, Volume 5",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol5/pdf/CFR-2025-title12-vol5.pdf",
+      "file": "CFR-2025-title12-vol5.pdf",
+      "sha256": "6da4855bd8539d5049645c27393494e3cff89abd5295c6e162b49e24bc30915b",
+      "pages": 883
+    },
+    {
+      "title": 12,
+      "volume": 6,
+      "name": "2025 CFR Title 12, Volume 6",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol6/pdf/CFR-2025-title12-vol6.pdf",
+      "file": "CFR-2025-title12-vol6.pdf",
+      "sha256": "8171eab7694d3d0721d509f12c854085749efb2326adfc7662446450f20c0a44",
+      "pages": 551
+    },
+    {
+      "title": 12,
+      "volume": 7,
+      "name": "2025 CFR Title 12, Volume 7",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol7/pdf/CFR-2025-title12-vol7.pdf",
+      "file": "CFR-2025-title12-vol7.pdf",
+      "sha256": "2698ed8194f2422144db288157d45484c973b7d07d8eb7a17ad676a3a010616e",
+      "pages": 1209
+    },
+    {
+      "title": 12,
+      "volume": 8,
+      "name": "2025 CFR Title 12, Volume 8",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol8/pdf/CFR-2025-title12-vol8.pdf",
+      "file": "CFR-2025-title12-vol8.pdf",
+      "sha256": "3af3a0014d69f0f0ecc44bc8de7e0b61a1b02569f5dbd15c494e3c524c4e5eee",
+      "pages": 831
+    },
+    {
+      "title": 12,
+      "volume": 9,
+      "name": "2025 CFR Title 12, Volume 9",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol9/pdf/CFR-2025-title12-vol9.pdf",
+      "file": "CFR-2025-title12-vol9.pdf",
+      "sha256": "86d8561c3756328555b0744837d2ae5a2d57ef247540dcaa15a2eee4cafb3b8c",
+      "pages": 1242
+    },
+    {
+      "title": 12,
+      "volume": 10,
+      "name": "2025 CFR Title 12, Volume 10",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title12-vol10/pdf/CFR-2025-title12-vol10.pdf",
+      "file": "CFR-2025-title12-vol10.pdf",
+      "sha256": "8ac32380dcd63fea5cf3215faa774ea87a29cdd34e6731ccf76f030e1de72dc7",
+      "pages": 901
+    },
+    {
+      "title": 15,
+      "volume": 1,
+      "name": "2025 CFR Title 15, Volume 1",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title15-vol1/pdf/CFR-2025-title15-vol1.pdf",
+      "file": "CFR-2025-title15-vol1.pdf",
+      "sha256": "050b62ca38f4bb905f3302d99ff4f79b3ae8530bd1ea479102348daf939319b4",
+      "pages": 466
+    },
+    {
+      "title": 15,
+      "volume": 2,
+      "name": "2025 CFR Title 15, Volume 2",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title15-vol2/pdf/CFR-2025-title15-vol2.pdf",
+      "file": "CFR-2025-title15-vol2.pdf",
+      "sha256": "02df0c09d82f270277f19b66c4f32a9385fff99424989e163a4b3ab821b6b45f",
+      "pages": 1013
+    },
+    {
+      "title": 15,
+      "volume": 3,
+      "name": "2025 CFR Title 15, Volume 3",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title15-vol3/pdf/CFR-2025-title15-vol3.pdf",
+      "file": "CFR-2025-title15-vol3.pdf",
+      "sha256": "e23522d272c015ff0a6d3a80f3fc28529bb6e9fbec8c0bda88ad147c0f0f7b29",
+      "pages": 787
+    },
+    {
+      "title": 15,
+      "volume": 4,
+      "name": "2025 CFR Title 15, Volume 4",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title15-vol4/pdf/CFR-2025-title15-vol4.pdf",
+      "file": "CFR-2025-title15-vol4.pdf",
+      "sha256": "603d19927b1ec3fb0272739b9838416dd7bb5b3298f6c64e27cbb791d5b1c26a",
+      "pages": 650
+    },
+    {
+      "title": 16,
+      "volume": 1,
+      "name": "2025 CFR Title 16, Volume 1",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title16-vol1/pdf/CFR-2025-title16-vol1.pdf",
+      "file": "CFR-2025-title16-vol1.pdf",
+      "sha256": "245d45afab16e33176e1a555cc17aa8d91f9380774c83d1853f6c666db8e5d34",
+      "pages": 878
+    },
+    {
+      "title": 16,
+      "volume": 2,
+      "name": "2025 CFR Title 16, Volume 2",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title16-vol2/pdf/CFR-2025-title16-vol2.pdf",
+      "file": "CFR-2025-title16-vol2.pdf",
+      "sha256": "8bebfc50d0cc59251bc15cd11a12b2724809f8274918e223f5325ac02ced9581",
+      "pages": 1053
+    },
+    {
+      "title": 17,
+      "volume": 1,
+      "name": "2025 CFR Title 17, Volume 1",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title17-vol1/pdf/CFR-2025-title17-vol1.pdf",
+      "file": "CFR-2025-title17-vol1.pdf",
+      "sha256": "be3effbd176adb07c198fd5c0eb8431b5d31576cd5d981458c23487965c06706",
+      "pages": 1022
+    },
+    {
+      "title": 17,
+      "volume": 2,
+      "name": "2025 CFR Title 17, Volume 2",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title17-vol2/pdf/CFR-2025-title17-vol2.pdf",
+      "file": "CFR-2025-title17-vol2.pdf",
+      "sha256": "79ea9e3966ef13d8025d7fc1e98e1f656cbafc209c3c5968f3be2a3b0a963071",
+      "pages": 612
+    },
+    {
+      "title": 17,
+      "volume": 3,
+      "name": "2025 CFR Title 17, Volume 3",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title17-vol3/pdf/CFR-2025-title17-vol3.pdf",
+      "file": "CFR-2025-title17-vol3.pdf",
+      "sha256": "9f9491ea3f3b1dd67b4be685be14e8ae5d1e48c9d1623f88ba690c9609228eed",
+      "pages": 1015
+    },
+    {
+      "title": 17,
+      "volume": 4,
+      "name": "2025 CFR Title 17, Volume 4",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title17-vol4/pdf/CFR-2025-title17-vol4.pdf",
+      "file": "CFR-2025-title17-vol4.pdf",
+      "sha256": "c793ff00c30d5c4d2f8ce35816d5e086f21aa42cc7f7e5809c23776a5f65024f",
+      "pages": 891
+    },
+    {
+      "title": 17,
+      "volume": 5,
+      "name": "2025 CFR Title 17, Volume 5",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title17-vol5/pdf/CFR-2025-title17-vol5.pdf",
+      "file": "CFR-2025-title17-vol5.pdf",
+      "sha256": "1c98ce1c7fc1f00a0a98ca99b3720b2caaec7366b809824acf4ddf55b22ae0f4",
+      "pages": 776
+    },
+    {
+      "title": 26,
+      "volume": 1,
+      "name": "2025 CFR Title 26, Volume 1",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol1/pdf/CFR-2025-title26-vol1.pdf",
+      "file": "CFR-2025-title26-vol1.pdf",
+      "sha256": "e5f8dbd0309bf0ae90637f57f42291e83d563404d0e50f897579c3f85812d3fd",
+      "pages": 1021
+    },
+    {
+      "title": 26,
+      "volume": 2,
+      "name": "2025 CFR Title 26, Volume 2",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol2/pdf/CFR-2025-title26-vol2.pdf",
+      "file": "CFR-2025-title26-vol2.pdf",
+      "sha256": "a397856bb5a00d09c4dc2e081fffc4c9bb104996e38e4165c8497c145893b568",
+      "pages": 629
+    },
+    {
+      "title": 26,
+      "volume": 3,
+      "name": "2025 CFR Title 26, Volume 3",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol3/pdf/CFR-2025-title26-vol3.pdf",
+      "file": "CFR-2025-title26-vol3.pdf",
+      "sha256": "59c98d161472ab39a6f93fbd1bd6d5ec72c790407ba343ee2b2d8485d54fbfcf",
+      "pages": 944
+    },
+    {
+      "title": 26,
+      "volume": 4,
+      "name": "2025 CFR Title 26, Volume 4",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol4/pdf/CFR-2025-title26-vol4.pdf",
+      "file": "CFR-2025-title26-vol4.pdf",
+      "sha256": "c5be4d46f351bb3a9d38c3750cf40f17c047ae290a7974e8b60b6d92023f4bf9",
+      "pages": 1207
+    },
+    {
+      "title": 26,
+      "volume": 5,
+      "name": "2025 CFR Title 26, Volume 5",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol5/pdf/CFR-2025-title26-vol5.pdf",
+      "file": "CFR-2025-title26-vol5.pdf",
+      "sha256": "001a310752854b86f6b97b93a1341d0a0c64d3dd05c473683a1e29cff19caf31",
+      "pages": 875
+    },
+    {
+      "title": 26,
+      "volume": 6,
+      "name": "2025 CFR Title 26, Volume 6",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol6/pdf/CFR-2025-title26-vol6.pdf",
+      "file": "CFR-2025-title26-vol6.pdf",
+      "sha256": "cdfec70ee44472b118aeb9975f71da10773303836b620e616935f34eb8b242d9",
+      "pages": 781
+    },
+    {
+      "title": 26,
+      "volume": 7,
+      "name": "2025 CFR Title 26, Volume 7",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol7/pdf/CFR-2025-title26-vol7.pdf",
+      "file": "CFR-2025-title26-vol7.pdf",
+      "sha256": "0ea0c4100a399c8d1fe936d248d22499fb46226845bc0ab860174519b94ecb3e",
+      "pages": 725
+    },
+    {
+      "title": 26,
+      "volume": 8,
+      "name": "2025 CFR Title 26, Volume 8",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol8/pdf/CFR-2025-title26-vol8.pdf",
+      "file": "CFR-2025-title26-vol8.pdf",
+      "sha256": "00e4dfdcd20fd72e469d5021d9a83574b489ebd173fe7e437fe197ad5ea9de0f",
+      "pages": 952
+    },
+    {
+      "title": 26,
+      "volume": 9,
+      "name": "2025 CFR Title 26, Volume 9",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol9/pdf/CFR-2025-title26-vol9.pdf",
+      "file": "CFR-2025-title26-vol9.pdf",
+      "sha256": "b465d9b5dbcd9b6e4e52a9d7c473644353f38f05d9f6aceda27632cf1c86243c",
+      "pages": 648
+    },
+    {
+      "title": 26,
+      "volume": 10,
+      "name": "2025 CFR Title 26, Volume 10",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol10/pdf/CFR-2025-title26-vol10.pdf",
+      "file": "CFR-2025-title26-vol10.pdf",
+      "sha256": "666560c7502569f235ee6969a1dfbc589b88d376abefe47e32674f051b0950fb",
+      "pages": 974
+    },
+    {
+      "title": 26,
+      "volume": 11,
+      "name": "2025 CFR Title 26, Volume 11",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol11/pdf/CFR-2025-title26-vol11.pdf",
+      "file": "CFR-2025-title26-vol11.pdf",
+      "sha256": "564469c9e173a027b34373372c0102b801ed11183a3b6716a6b8a3a45c89de3d",
+      "pages": 1148
+    },
+    {
+      "title": 26,
+      "volume": 12,
+      "name": "2025 CFR Title 26, Volume 12",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol12/pdf/CFR-2025-title26-vol12.pdf",
+      "file": "CFR-2025-title26-vol12.pdf",
+      "sha256": "dd6e0eb7e3bdc2581e64edbcfe4a31ee8ce82a5d574f1976c49d54534bec306c",
+      "pages": 987
+    },
+    {
+      "title": 26,
+      "volume": 13,
+      "name": "2025 CFR Title 26, Volume 13",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol13/pdf/CFR-2025-title26-vol13.pdf",
+      "file": "CFR-2025-title26-vol13.pdf",
+      "sha256": "c7d2410f30182a2210850d2bff2e9693ce9523cfb6335b9b684cdf72f56d4e3d",
+      "pages": 1149
+    },
+    {
+      "title": 26,
+      "volume": 14,
+      "name": "2025 CFR Title 26, Volume 14",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol14/pdf/CFR-2025-title26-vol14.pdf",
+      "file": "CFR-2025-title26-vol14.pdf",
+      "sha256": "13d84032d099958d9e44ac2f9e9203a5df826346dbc1ede03ef4c77b44aca7e1",
+      "pages": 1129
+    },
+    {
+      "title": 26,
+      "volume": 15,
+      "name": "2025 CFR Title 26, Volume 15",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol15/pdf/CFR-2025-title26-vol15.pdf",
+      "file": "CFR-2025-title26-vol15.pdf",
+      "sha256": "e29cb8725ed761bad263c00117e670bfc2c654ae6dfa9223ce5d41c6e0b9677e",
+      "pages": 1050
+    },
+    {
+      "title": 26,
+      "volume": 16,
+      "name": "2025 CFR Title 26, Volume 16",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol16/pdf/CFR-2025-title26-vol16.pdf",
+      "file": "CFR-2025-title26-vol16.pdf",
+      "sha256": "658f44ef502f3572ee25069cd98463300783d919c91db2c0da92c44f391c4218",
+      "pages": 872
+    },
+    {
+      "title": 26,
+      "volume": 17,
+      "name": "2025 CFR Title 26, Volume 17",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol17/pdf/CFR-2025-title26-vol17.pdf",
+      "file": "CFR-2025-title26-vol17.pdf",
+      "sha256": "c5660eca68640b6eb227a8468490ff1c53f926ebfd9b0a0ec2a7c9a404ed51e2",
+      "pages": 542
+    },
+    {
+      "title": 26,
+      "volume": 18,
+      "name": "2025 CFR Title 26, Volume 18",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol18/pdf/CFR-2025-title26-vol18.pdf",
+      "file": "CFR-2025-title26-vol18.pdf",
+      "sha256": "bac42fd02ea38fddf1c21d818c6de17f49f3d69d3560b3398ec1e1f7c27b1a34",
+      "pages": 360
+    },
+    {
+      "title": 26,
+      "volume": 19,
+      "name": "2025 CFR Title 26, Volume 19",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol19/pdf/CFR-2025-title26-vol19.pdf",
+      "file": "CFR-2025-title26-vol19.pdf",
+      "sha256": "9cfe2045de73b00a23337fbfc953a3a2d1428450832f30d3a92322ae686cce42",
+      "pages": 860
+    },
+    {
+      "title": 26,
+      "volume": 20,
+      "name": "2025 CFR Title 26, Volume 20",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol20/pdf/CFR-2025-title26-vol20.pdf",
+      "file": "CFR-2025-title26-vol20.pdf",
+      "sha256": "39c092b199b6ccce721c7bdd5b9448c0cbb61282558dec04b4973cc651048550",
+      "pages": 1113
+    },
+    {
+      "title": 26,
+      "volume": 21,
+      "name": "2025 CFR Title 26, Volume 21",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol21/pdf/CFR-2025-title26-vol21.pdf",
+      "file": "CFR-2025-title26-vol21.pdf",
+      "sha256": "01075817b05efe4ed0cc11a284a35d1850f69d2291f206e937de2b6fd2a436d7",
+      "pages": 107
+    },
+    {
+      "title": 26,
+      "volume": 22,
+      "name": "2025 CFR Title 26, Volume 22",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title26-vol22/pdf/CFR-2025-title26-vol22.pdf",
+      "file": "CFR-2025-title26-vol22.pdf",
+      "sha256": "012f952ec14f4d76e0e8e082548c8d77178ad1dc0d9438223c481b1c3f0672ca",
+      "pages": 207
+    },
+    {
+      "title": 29,
+      "volume": 1,
+      "name": "2025 CFR Title 29, Volume 1",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title29-vol1/pdf/CFR-2025-title29-vol1.pdf",
+      "file": "CFR-2025-title29-vol1.pdf",
+      "sha256": "3c9ae2f8f290d810bf750052861052f801a3021f4f57456b08bc6570ac99fade",
+      "pages": 818
+    },
+    {
+      "title": 29,
+      "volume": 2,
+      "name": "2025 CFR Title 29, Volume 2",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title29-vol2/pdf/CFR-2025-title29-vol2.pdf",
+      "file": "CFR-2025-title29-vol2.pdf",
+      "sha256": "0d5686fa4a6d7205d1a26a11d9b71597c551b873f8304c89b0fd3b427daa9291",
+      "pages": 300
+    },
+    {
+      "title": 29,
+      "volume": 3,
+      "name": "2025 CFR Title 29, Volume 3",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title29-vol3/pdf/CFR-2025-title29-vol3.pdf",
+      "file": "CFR-2025-title29-vol3.pdf",
+      "sha256": "0cb2a53f77ebf50de830980e52932c038a5b0c91d6f80183c8c15ab7059f3019",
+      "pages": 952
+    },
+    {
+      "title": 29,
+      "volume": 4,
+      "name": "2025 CFR Title 29, Volume 4",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title29-vol4/pdf/CFR-2025-title29-vol4.pdf",
+      "file": "CFR-2025-title29-vol4.pdf",
+      "sha256": "59ae7522f59375030e0cded13f9f094ef38d7dd5726c261dc926ededa1e0562e",
+      "pages": 595
+    },
+    {
+      "title": 29,
+      "volume": 5,
+      "name": "2025 CFR Title 29, Volume 5",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title29-vol5/pdf/CFR-2025-title29-vol5.pdf",
+      "file": "CFR-2025-title29-vol5.pdf",
+      "sha256": "08d6cfee029b9ec1a56e52dc4cabf2c3d7305ea0b6541f453aeb4e00002a401a",
+      "pages": 1000
+    },
+    {
+      "title": 31,
+      "volume": 1,
+      "name": "2025 CFR Title 31, Volume 1",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title31-vol1/pdf/CFR-2025-title31-vol1.pdf",
+      "file": "CFR-2025-title31-vol1.pdf",
+      "sha256": "7647d9a46ed55c3b46b29231edd93c5446117c1a5dff48ec7083bd6cdbedd07d",
+      "pages": 534
+    },
+    {
+      "title": 31,
+      "volume": 2,
+      "name": "2025 CFR Title 31, Volume 2",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title31-vol2/pdf/CFR-2025-title31-vol2.pdf",
+      "file": "CFR-2025-title31-vol2.pdf",
+      "sha256": "93b1d69fdb0482caab65b1f3d4f8d59f7ebf7d21567ea38809fb57da22d7baeb",
+      "pages": 616
+    },
+    {
+      "title": 31,
+      "volume": 3,
+      "name": "2025 CFR Title 31, Volume 3",
+      "url": "https://www.govinfo.gov/content/pkg/CFR-2025-title31-vol3/pdf/CFR-2025-title31-vol3.pdf",
+      "file": "CFR-2025-title31-vol3.pdf",
+      "sha256": "aca72f17011cb0a70f3b679f6dbf0c8675a769e45188da0442b39eb1e77cc760",
+      "pages": 1342
+    }
+  ]
+}

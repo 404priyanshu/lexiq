@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     chunk_max_tokens: int = 480
     chunk_overlap_tokens: int = 64
     embed_batch_size: int = 32
+    # Concurrent ingest jobs per worker. Parsing is single-threaded while embedding uses every
+    # core, so a few jobs in flight keep the CPU busy.
+    worker_max_jobs: int = 2
 
     # Retrieval. Candidates from each first-stage list are fused with RRF; the top
     # `rerank_candidates` go through the cross-encoder; `top_k` are returned.
