@@ -8,9 +8,9 @@ evidence is insufficient. Every retrieval and prompt change is scored against a
 | | |
 |---|---|
 | Corpus | **52,650 pages** (561 documents, 124,353 chunks): all 510 CUAD contracts + 51 volumes of federal regulations |
-| Retrieval quality | recall@5 **0.762**, recall@1 0.459, MRR@10 0.586 on 425 answerable golden questions |
+| Retrieval quality | recall@5 **0.762** within a contract; across all 52k pages the right contract is found 96% of the time at rank 1 but the right clause only 34% in the top 5 ([details](#whole-corpus-quality)) |
 | Retrieval latency | **179 / 188 ms** p50 / p95 per request at 52k pages; <1 ms on a cache hit |
-| CI | lint, 72 tests, web build, and a golden-set gate that fails on regression |
+| CI | lint, 75 tests, web build, and a golden-set gate that fails on regression |
 
 See [docs/PLAN.md](docs/PLAN.md) for the build plan and [evals/](evals/README.md) for the eval
 methodology.
@@ -127,6 +127,26 @@ What the sweeps showed:
 - At the start of evals, the retrieval-stage abstain threshold refused 33% of answerable
   questions; it's now a floor for off-topic queries (1.4% false refusals) and the model's
   insufficient-evidence path does the real abstaining.
+
+### Whole-corpus quality
+
+The golden questions say "this agreement", so they're evaluated within their contract. To
+measure search across all 52k pages, `evals/golden_corpus.jsonl` rewrites the 420 answerable
+questions whose contract has an identifiable party to name it, from CUAD's own annotations
+("In the Master Supply Agreement between Reynolds Consumer Products LLC and Pactiv LLC, ...").
+A hit only counts if the clause comes from the named contract.
+
+| | Within the contract | Whole corpus |
+|---|---|---|
+| Right contract, top 1 / top 5 | — | **0.964 / 1.000** |
+| Right clause recall@1 | 0.459 | 0.045 |
+| Right clause recall@5 | 0.762 | 0.338 |
+| Right clause recall@8 | 0.831 | 0.431 |
+
+Retrieval finds the contract almost every time but returns the wrong passage from it: on 35
+of 49 sampled misses the top result was the contract's preamble, the one chunk that repeats
+the party names the question uses. The likely fix is two-stage retrieval (pick the contract
+from the names, then search its clauses with the rest of the question); it's not built yet.
 
 Index size at 52k pages: 341 MB of chunk rows, 237 MB HNSW index, 84 MB BM25 index.
 

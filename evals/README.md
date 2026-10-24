@@ -32,6 +32,22 @@ hold at least half of it; if a span is longer than a chunk, at least 90% of the 
 inside it ([`matching.py`](../services/api/app/evals/matching.py)). Every answerable question's
 evidence is locatable in the parsed PDFs, and a median of one chunk per question matches.
 
+### Whole-corpus slice
+
+`golden_corpus.jsonl` holds the 420 answerable questions whose contract names at least one
+company, rewritten to name the contract ("In the Supply Agreement between X and Y, ...") so
+they can be asked with no document filter. Party names come from CUAD's annotations, keeping
+only real legal entities (role labels like "Seller" or "Party A" and defined terms like
+"Company" are dropped); 5 questions are skipped because their contract names none. A hit only
+counts when the evidence chunk comes from the named contract, since boilerplate clauses are
+near-identical across contracts. Run it with `--scope corpus`; it also reports how often the
+right contract appears at all.
+
+```bash
+uv run python -m app.evals.golden_corpus --cuad ../../data/cuad/extracted/CUAD_v1  # rebuild
+uv run python -m app.evals.run --scope corpus                                      # needs the full corpus
+```
+
 ## Metrics
 
 | Metric | What it measures | Needs API key |

@@ -76,3 +76,55 @@ async def test_bulk_wait_times_out_naming_unfinished_documents(clean_db):
 
     with pytest.raises(TimeoutError, match=r"1 documents unfinished.*Stuck MSA \(processing\)"):
         await wait([doc.id], interval=0, max_wait_s=0)
+
+
+async def test_bulk_enqueue_dedupes_identical_files_so_wait_can_finish(clean_db, client, tmp_path):
+    from app.db import SessionLocal
+    from app.ingest.bulk import enqueue, wait
+    from app.models import Document
+
+    data = make_pdf(["Identical contract text."])
+    a, b = tmp_path / "a.pdf", tmp_path / "b.pdf"
+    a.write_bytes(data)
+    b.write_bytes(data)
+
+    ids = await enqueue([(a, "A", None), (b, "B", None)])
+    assert len(ids) == 1
+
+    async with SessionLocal() as session:
+        (await session.get(Document, ids[0])).status = "ready"
+        await session.commit()
+    await wait(ids, interval=0, max_wait_s=0)  # returns instead of timing out
+
+
+def test_legal_entities_keep_company_names_and_drop_roles_and_defined_terms():
+    from app.evals.golden_corpus import legal_entities
+
+    parties = [
+        "Valeant", "Dova Pharmaceuticals, Inc.", "Company", "The Company", "Party A",
+        'Dova and Valeant are each referred to individually as a "Party"',
+        "_______________________ and its affiliates", "Valeant Pharmaceuticals North America LLC",
+        "DOVA PHARMACEUTICALS, INC.",
+    ]  # fmt: skip
+    assert legal_entities(parties) == [
+        "Dova Pharmaceuticals, Inc.",
+        "Valeant Pharmaceuticals North America LLC",
+    ]
+
+
+def test_contract_reference_and_question_naming():
+    from app.evals.golden_corpus import contract_reference, name_question
+
+    ref = contract_reference("MASTER SUPPLY AGREEMENT", ["Seller", "PACTIV LLC", "Acme Corp."])
+    assert ref == "the Master Supply Agreement between PACTIV LLC and Acme Corp."
+    assert contract_reference("STRATEGIC ALLIANCE AGREEMENT, d", ["Edible Arrangements, LLC"]) == (
+        "the Strategic Alliance Agreement with Edible Arrangements, LLC"
+    )
+    assert contract_reference("Master Services Agreement (", ["RadialSpark, LLC"]).startswith(
+        "the Master Services Agreement with"
+    )
+    assert contract_reference("Agreement", ["Seller", "Buyer"]) is None
+    assert name_question("Which jurisdiction's law governs this agreement?", ref) == (
+        "In the Master Supply Agreement between PACTIV LLC and Acme Corp., "
+        "which jurisdiction's law governs the agreement?"
+    )
