@@ -5,6 +5,7 @@ import time
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -13,6 +14,9 @@ from app.config import Settings
 from app.ml.embedder import Embedder
 from app.ml.reranker import Reranker, sigmoid
 from app.retrieval.search import bm25_search, dense_search, rrf
+
+if TYPE_CHECKING:
+    from app.cache import QueryCache
 
 
 @dataclass
@@ -39,6 +43,7 @@ class RetrievalResult:
     abstain_reason: str | None
     candidates: int
     timings_ms: dict[str, float] = field(default_factory=dict)
+    cached: bool = False
 
 
 class _Timer:
@@ -64,12 +69,25 @@ _LOAD_CHUNKS = text(
 
 class Retriever:
     def __init__(
-        self, engine: AsyncEngine, embedder: Embedder, reranker: Reranker, settings: Settings
+        self,
+        engine: AsyncEngine,
+        embedder: Embedder,
+        reranker: Reranker,
+        settings: Settings,
+        cache: "QueryCache | None" = None,
     ):
         self.engine = engine
         self.embedder = embedder
         self.reranker = reranker
         self.s = settings
+        self.cache = cache
+
+    @classmethod
+    def from_settings(
+        cls, engine: AsyncEngine, settings: Settings, cache: "QueryCache | None" = None
+    ) -> "Retriever":
+        reranker = Reranker(max_length=settings.rerank_max_tokens, int8=settings.reranker_int8)
+        return cls(engine, Embedder(), reranker, settings, cache)
 
     async def retrieve(
         self,
@@ -78,6 +96,20 @@ class Retriever:
         document_ids: Sequence[uuid.UUID] | None = None,
     ) -> RetrievalResult:
         top_k = top_k or self.s.top_k
+        if self.cache is None:
+            return await self._retrieve(query, top_k, document_ids)
+
+        started = time.perf_counter()
+        if hit := await self.cache.get_retrieval(query, top_k, document_ids):
+            hit.timings_ms = {"cache": _ms_since(started), "total": _ms_since(started)}
+            return hit
+        result = await self._retrieve(query, top_k, document_ids)
+        await self.cache.set_retrieval(query, top_k, document_ids, result)
+        return result
+
+    async def _retrieve(
+        self, query: str, top_k: int, document_ids: Sequence[uuid.UUID] | None
+    ) -> RetrievalResult:
         t: dict[str, float] = {}
         started = time.perf_counter()
 

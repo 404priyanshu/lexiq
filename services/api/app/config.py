@@ -34,7 +34,14 @@ class Settings(BaseSettings):
     dense_k: int = 50
     hnsw_ef_search: int = 100
     rrf_k: int = 60
-    rerank_candidates: int = 30
+    # Golden-set sweep (evals/README.md): 10 candidates keeps recall@5 within 0.003 of 30
+    # and halves rerank time; the reranker rarely lifts a deeper candidate into the top 8.
+    rerank_candidates: int = 10
+    # Cross-encoder input length (query + passage, in tokens). Keep the full 512: cutting to
+    # 256 dropped recall@5 by ~0.07 because many clauses sit past a chunk's first 256 tokens.
+    rerank_max_tokens: int = 512
+    # int8-quantized cross-encoder: same recall on the golden set, faster on CPU.
+    reranker_int8: bool = True
     top_k: int = 8
     # Abstain before generation when the best reranked passage's sigmoid(logit) is below this.
     # Only a floor for clearly off-topic questions: on the CUAD golden set the reranker's score
@@ -52,9 +59,26 @@ class Settings(BaseSettings):
     llm_fallbacks: bool = True
     judge_model: str = "claude-opus-5-5"
 
+    # Redis caches (app.cache). Keys carry the corpus version, so TTLs only bound memory.
+    cache_enabled: bool = True
+    cache_retrieval_ttl_s: int = 3600
+    cache_answer_ttl_s: int = 86400
+
     cors_origins: list[str] = ["http://localhost:3000"]
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def settings_with(overrides: list[str]) -> Settings:
+    """Settings with KEY=VALUE overrides applied (for eval and benchmark sweeps)."""
+    updates = {}
+    for item in overrides:
+        key, sep, value = item.partition("=")
+        if not sep or key not in Settings.model_fields:
+            raise ValueError(f"bad override {item!r}; expected KEY=VALUE with a Settings field")
+        updates[key] = value
+    # Init kwargs take precedence over env and .env, and are validated/coerced like them.
+    return Settings(**{**get_settings().model_dump(), **updates})

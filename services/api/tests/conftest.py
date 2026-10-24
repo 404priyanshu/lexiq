@@ -4,6 +4,7 @@ Env vars are set before anything imports app.config / app.db (engine is built at
 """
 
 import asyncio
+import hashlib
 import os
 import tempfile
 
@@ -18,17 +19,19 @@ import httpx  # noqa: E402
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
-from sqlalchemy import text  # noqa: E402
+from sqlalchemy import insert, text  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 
 from app.config import API_ROOT, get_settings  # noqa: E402
-from app.db import engine  # noqa: E402
+from app.db import SessionLocal, engine  # noqa: E402
 from app.ingest.pipeline import Models  # noqa: E402
 from app.main import app, lifespan  # noqa: E402
 from app.ml.embedder import Embedder  # noqa: E402
 from app.ml.registry import EMBEDDER, RERANKER  # noqa: E402
 from app.ml.reranker import Reranker  # noqa: E402
 from app.ml.runtime import load_tokenizer, model_path_exists  # noqa: E402
+from app.models import Chunk, Document  # noqa: E402
+from tests.data import CORPUS  # noqa: E402
 
 
 async def _ensure_database(url: str) -> None:
@@ -77,3 +80,41 @@ def reranker() -> Reranker:
     if not model_path_exists(RERANKER):
         pytest.skip("reranker not downloaded (uv run python -m app.ml.download)")
     return Reranker()
+
+
+@pytest.fixture
+async def corpus(clean_db, models) -> dict[str, Document]:
+    """Insert CORPUS with real embeddings, one chunk per passage on its own page."""
+    docs = {}
+    async with SessionLocal() as session:
+        for title, passages in CORPUS.items():
+            doc = Document(
+                title=title,
+                mime_type="text/plain",
+                sha256=hashlib.sha256(title.encode()).hexdigest(),
+                page_count=len(passages),
+                status="ready",
+            )
+            session.add(doc)
+            await session.flush()
+            vectors = models.embedder.embed_documents(passages)
+            await session.execute(
+                insert(Chunk),
+                [
+                    {
+                        "document_id": doc.id,
+                        "ordinal": i,
+                        "page_start": i + 1,
+                        "page_end": i + 1,
+                        "char_start": 0,
+                        "char_end": len(p),
+                        "content": p,
+                        "token_count": len(p.split()),
+                        "embedding": v,
+                    }
+                    for i, (p, v) in enumerate(zip(passages, vectors, strict=True))
+                ],
+            )
+            docs[title] = doc
+        await session.commit()
+    return docs

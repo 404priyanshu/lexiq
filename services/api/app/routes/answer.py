@@ -28,7 +28,12 @@ async def answer(request: Request, body: SearchRequest) -> StreamingResponse:
     async def stream():
         try:
             async for event, data in answer_events(
-                retriever, generator, body.query, body.top_k, body.document_ids
+                retriever,
+                generator,
+                body.query,
+                body.top_k,
+                body.document_ids,
+                cache=getattr(request.app.state, "cache", None),
             ):
                 yield _sse(event, data)
         except Exception:

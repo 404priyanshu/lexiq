@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 API := cd services/api &&
 WEB := cd apps/web &&
 
-.PHONY: setup up down migrate models api worker web test lint eval-corpus eval eval-answers
+.PHONY: setup up down migrate models api worker web test lint eval-corpus eval eval-answers bench
 
 setup: ## First-time setup: env file, deps, stack, schema
 	test -f .env || cp .env.example .env
@@ -54,3 +54,6 @@ eval: ## Retrieval metrics on all 500 golden questions, then the regression gate
 eval-answers: ## Also generate + judge answers for 100 questions (uses the Anthropic API)
 	$(API) uv run python -m app.evals.run --answers 100 --out ../../evals/runs/latest
 	$(API) uv run python -m app.evals.gate ../../evals/runs/latest/summary.json
+
+bench: ## Per-request retrieval latency over 100 golden questions (cold, then warm cache)
+	$(API) uv run python -m app.bench.run --questions 100 --cache --repeat 2

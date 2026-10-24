@@ -13,6 +13,8 @@ class ModelSpec:
     revision: str
     files: tuple[str, ...]
     onnx_file: str
+    # Dynamically quantized (int8 weights) copy of onnx_file, built locally by app.ml.download.
+    int8_file: str | None = None
 
     @property
     def path(self) -> Path:
@@ -33,6 +35,7 @@ RERANKER = ModelSpec(
     revision="233902d25c440f23af6f7d6e94d2946bac0bee0a",
     files=("onnx/model.onnx", "tokenizer.json", "config.json"),
     onnx_file="onnx/model.onnx",
+    int8_file="onnx/model_int8.onnx",
 )
 
 ALL_MODELS = (EMBEDDER, RERANKER)

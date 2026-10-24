@@ -45,7 +45,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: services/api/models
-          key: onnx-${{ hashFiles('services/api/app/ml/registry.py') }}
+          key: onnx-${{ hashFiles('services/api/app/ml/registry.py', 'services/api/app/ml/download.py') }}
       - run: uv sync --locked
       - run: uv run python -m app.ml.download
       - run: uv run ruff check .
@@ -109,7 +109,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: services/api/models
-          key: onnx-${{ hashFiles('services/api/app/ml/registry.py') }}
+          key: onnx-${{ hashFiles('services/api/app/ml/registry.py', 'services/api/app/ml/download.py') }}
       - name: Cache CUAD
         uses: actions/cache@v4
         with:
@@ -126,13 +126,41 @@ jobs:
           echo "$md5  data/cuad/CUAD_v1.zip" | md5sum -c -
           unzip -q -o data/cuad/CUAD_v1.zip -d data/cuad/extracted
       - run: uv run alembic upgrade head
-      - name: Ingest eval corpus
+      # Ingesting 98 contracts takes ~15 min on a hosted runner, so the resulting rows are
+      # cached. The key covers everything that can change them: corpus, parsing/chunking,
+      # embedding model and runtime, and the schema.
+      - name: Restore eval index
+        id: index
+        uses: actions/cache/restore@v4
+        with:
+          path: data/eval-index.dump
+          key: eval-index-${{ hashFiles('evals/corpus.json', 'services/api/app/ingest/**', 'services/api/app/ml/**', 'services/api/app/models.py', 'services/api/migrations/**') }}
+      - name: Load cached eval index
+        if: steps.index.outputs.cache-hit == 'true'
+        working-directory: .
+        run: |
+          pg=$(docker ps -qf "ancestor=paradedb/paradedb:0.26.0-pg17")
+          docker exec -i "$pg" pg_restore -U lexiq -d lexiq --data-only --disable-triggers < data/eval-index.dump
+      - name: Ingest eval corpus (skips documents already loaded)
         run: uv run python -m app.evals.corpus --cuad ../../data/cuad/extracted/CUAD_v1
+      - name: Dump eval index
+        if: steps.index.outputs.cache-hit != 'true'
+        working-directory: .
+        run: |
+          pg=$(docker ps -qf "ancestor=paradedb/paradedb:0.26.0-pg17")
+          docker exec "$pg" pg_dump -U lexiq -d lexiq -Fc --data-only -t documents -t chunks > data/eval-index.dump
+      - name: Save eval index
+        if: steps.index.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/eval-index.dump
+          key: ${{ steps.index.outputs.cache-primary-key }}
       - name: Run eval
         run: |
           answers=0
           [ -n "$ANTHROPIC_API_KEY" ] && answers=$ANSWERS
-          uv run python -m app.evals.run --answers "$answers" --out ../../evals/runs/ci
+          # One question at a time: ONNX already uses every core of the small hosted runner.
+          uv run python -m app.evals.run --answers "$answers" --concurrency 1 --out ../../evals/runs/ci
       - name: Gate against baseline
         run: uv run python -m app.evals.gate ../../evals/runs/ci/summary.json
       - uses: actions/upload-artifact@v4

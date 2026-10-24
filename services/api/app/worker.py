@@ -5,6 +5,7 @@ import uuid
 
 from arq.connections import RedisSettings
 
+from app.cache import bump_corpus_version
 from app.config import get_settings
 from app.db import SessionLocal, engine
 from app.ingest.pipeline import Models, ingest_document
@@ -35,6 +36,9 @@ async def shutdown(ctx: dict) -> None:
 async def ingest(ctx: dict, document_id: str) -> None:
     async with SessionLocal() as session:
         await ingest_document(session, uuid.UUID(document_id), ctx["models"])
+    # New chunks change what any cached retrieval or answer would return. Bumping on a failed
+    # ingest too is harmless (it only drops cache entries) and keeps this unconditional.
+    await bump_corpus_version(ctx["redis"])
 
 
 class WorkerSettings:

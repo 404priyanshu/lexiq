@@ -4,7 +4,7 @@ Events, in order:
   sources  the passages given to the model, numbered as the model sees them
   delta    answer text as it streams (zero or more)
   notice   a model fallback happened mid-answer (rare; informational)
-  done     final answer, citation check, abstain/refusal flags, usage, timings
+  done     final answer, citation check, abstain/refusal/cached flags, usage, timings
   error    replaces `done` if generation fails
 """
 
@@ -12,7 +12,7 @@ import logging
 import time
 import uuid
 from collections.abc import AsyncIterator, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import anthropic
 
@@ -20,6 +20,9 @@ from app.generation.citations import check_citations
 from app.generation.generator import Completion, FallbackNotice, Generator, TextDelta
 from app.generation.prompt import INSUFFICIENT
 from app.retrieval.retriever import Retriever
+
+if TYPE_CHECKING:
+    from app.cache import QueryCache
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +39,50 @@ async def answer_events(
     question: str,
     top_k: int | None = None,
     document_ids: Sequence[uuid.UUID] | None = None,
+    cache: "QueryCache | None" = None,
+) -> AsyncIterator[Event]:
+    """Answer events, replayed from the answer cache when the same question was answered
+    against the same corpus version and config."""
+    if cache is None:
+        async for event in _answer_events(retriever, generator, question, top_k, document_ids):
+            yield event
+        return
+
+    started = time.perf_counter()
+    if hit := await cache.get_answer(question, top_k, document_ids):
+        for name, data in hit:
+            if name == "done":
+                data = data | {"cached": True, "timings_ms": {"total": _ms(started)}}
+            yield name, data
+        return
+
+    stored: list[Event] = []
+    async for name, data in _answer_events(retriever, generator, question, top_k, document_ids):
+        yield name, data
+        if name in ("sources", "done"):
+            stored.append((name, data))
+        if name == "error":
+            return
+    events = dict(stored)
+    if "sources" not in events or "done" not in events:
+        return
+    done = events["done"]
+    # Refusals and cut-off answers are worth retrying, so they're never cached. Abstains are:
+    # for the same corpus version, config and question they're the right answer, and the
+    # next ingest bumps the version anyway.
+    if not done["refused"] and not done["truncated"]:
+        replay = [("sources", events["sources"])]
+        if done["answer"]:
+            replay.append(("delta", {"text": done["answer"]}))
+        await cache.set_answer(question, top_k, document_ids, [*replay, ("done", done)])
+
+
+async def _answer_events(
+    retriever: Retriever,
+    generator: Generator,
+    question: str,
+    top_k: int | None,
+    document_ids: Sequence[uuid.UUID] | None,
 ) -> AsyncIterator[Event]:
     started = time.perf_counter()
     result = await retriever.retrieve(question, top_k, document_ids)
@@ -66,6 +113,7 @@ async def answer_events(
         "abstain_reason": None,
         "refused": False,
         "truncated": False,
+        "cached": False,
         "citations": None,
         "model": None,
         "usage": None,

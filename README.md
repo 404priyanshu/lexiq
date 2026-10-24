@@ -4,8 +4,9 @@ Eval-driven RAG platform for document QA: hybrid retrieval (BM25 + pgvector HNSW
 cross-encoder rerank, citation-grounded streaming answers, and an abstain path when
 evidence is insufficient. See [docs/PLAN.md](docs/PLAN.md) for the build plan.
 
-**Status:** Phase 5 (evals) — a 500-question golden set from lawyer-annotated CUAD contracts
-scores retrieval and answers; CI blocks changes that regress it. See [evals/](evals/README.md).
+**Status:** Phase 6 (latency + cost) — rerank pruning and an int8 reranker cut retrieval
+p95 from 516 ms to 169 ms at unchanged recall; Redis caches serve repeat questions in under
+1 ms. See [Performance](#performance).
 
 ## Stack
 
@@ -57,3 +58,34 @@ Tests use a separate `lexiq_test` database and Redis DB 15. Tests that call the 
 are skipped unless `LEXIQ_LIVE_TESTS=1`.
 
 Postgres listens on `5433` and Redis on `6380` so they don't clash with local installs.
+
+## Performance
+
+Retrieval latency per request, 100 golden questions run one at a time on an Apple M5 Pro
+(`make bench`); recall from the 500-question golden set (`make eval`).
+
+| Configuration | p50 | p95 | recall@5 | recall@1 |
+|---|---|---|---|---|
+| Phase 5: rerank 30 candidates, fp32 | 387 ms | 516 ms | 0.765 | 0.452 |
+| Rerank 10 candidates | 186 ms | 198 ms | 0.762 | 0.457 |
+| **+ int8 reranker (default)** | **159 ms** | **169 ms** | **0.762** | **0.459** |
+| Repeat question (Redis cache hit) | <1 ms | 1 ms | — | — |
+
+What the sweeps showed:
+
+- Reranking 10 candidates instead of 30 costs 0.003 recall@5. The cross-encoder rarely lifts
+  a candidate from below RRF's top 10 into the top 8.
+- Truncating reranker input from 512 to 256 tokens would have cut latency further but dropped
+  recall@5 to ~0.70: many clauses sit past a chunk's first 256 tokens. Kept at 512.
+- Dynamic int8 quantization of the cross-encoder (87 MB → 22 MB) leaves recall unchanged.
+- BM25 (~40 ms, pg_search's per-query cost) is now the slowest first-stage step; it already
+  runs in parallel with query embedding and the HNSW search.
+
+Caches (`app/cache.py`): reranked retrievals (1 h) and finished answers (24 h) live in Redis
+under keys that include a corpus version bumped by every ingest and a fingerprint of the
+settings and prompt, so stale results are never served and nothing needs invalidating.
+Refusals and truncated answers aren't cached. Anthropic prompt caching isn't used: the system
+prompt is below the minimum cacheable length and the sources differ per question.
+
+End-to-end answer latency and $/query (`make bench` with `--answers`) need `ANTHROPIC_API_KEY`
+and haven't been measured yet.

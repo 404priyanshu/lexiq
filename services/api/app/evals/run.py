@@ -19,7 +19,7 @@ from pathlib import Path
 
 from anthropic import AsyncAnthropic
 
-from app.config import REPO_ROOT, get_settings
+from app.config import REPO_ROOT, Settings, get_settings, settings_with
 from app.db import engine
 from app.evals.corpus import document_ids_by_sha, load_corpus
 from app.evals.golden import GOLDEN_PATH
@@ -27,8 +27,6 @@ from app.evals.judge import Judge
 from app.evals.matching import first_hit
 from app.generation.generator import ClaudeGenerator
 from app.generation.service import answer_events
-from app.ml.embedder import Embedder
-from app.ml.reranker import Reranker
 from app.models import DocumentStatus
 from app.retrieval.retriever import RetrievalResult, Retriever
 
@@ -70,9 +68,9 @@ def _pct(values: list[float], q: float) -> float:
 
 
 async def evaluate(
-    answer_limit: int, concurrency: int, limit: int | None = None
+    answer_limit: int, concurrency: int, limit: int | None = None, settings: Settings | None = None
 ) -> tuple[list[dict], dict]:
-    s = get_settings()
+    s = settings or get_settings()
     golden = [json.loads(line) for line in GOLDEN_PATH.read_text().splitlines()][:limit]
     docs = await document_ids_by_sha()
     doc_for = {}
@@ -83,7 +81,7 @@ async def evaluate(
         doc_for[d["contract"]] = doc_id
 
     log(f"loading models for {len(golden)} questions")
-    retriever = Retriever(engine, Embedder(), Reranker(), s)
+    retriever = Retriever.from_settings(engine, s)
     generator = judge = None
     if answer_limit:
         key = s.anthropic_api_key.get_secret_value() if s.anthropic_api_key else ""
@@ -281,15 +279,21 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=2)
     parser.add_argument("--limit", type=int, default=None, help="only the first N questions")
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument(
+        "--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE",
+        help="override a Settings field for this run, e.g. --set rerank_candidates=15",
+    )  # fmt: skip
     args = parser.parse_args()
+    settings = settings_with(args.overrides)
 
     async def run():
         try:
-            return await evaluate(args.answers, args.concurrency, args.limit)
+            return await evaluate(args.answers, args.concurrency, args.limit, settings)
         finally:
             await engine.dispose()
 
     rows, summary = asyncio.run(run())
+    summary["overrides"] = args.overrides
     out = args.out or RUNS_DIR / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out.mkdir(parents=True, exist_ok=True)
     with (out / "results.jsonl").open("w") as f:
