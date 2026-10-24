@@ -63,12 +63,18 @@ async def answer_events(
             stored.append((name, data))
         if name == "error":
             return
-    done = stored[-1][1]
-    # Refusals and cut-off answers are worth retrying, so they're never cached.
+    events = dict(stored)
+    if "sources" not in events or "done" not in events:
+        return
+    done = events["done"]
+    # Refusals and cut-off answers are worth retrying, so they're never cached. Abstains are:
+    # for the same corpus version, config and question they're the right answer, and the
+    # next ingest bumps the version anyway.
     if not done["refused"] and not done["truncated"]:
-        sources, final = stored
-        replay = [sources] + ([("delta", {"text": done["answer"]})] if done["answer"] else [])
-        await cache.set_answer(question, top_k, document_ids, replay + [final])
+        replay = [("sources", events["sources"])]
+        if done["answer"]:
+            replay.append(("delta", {"text": done["answer"]}))
+        await cache.set_answer(question, top_k, document_ids, [*replay, ("done", done)])
 
 
 async def _answer_events(

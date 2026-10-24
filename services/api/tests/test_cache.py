@@ -92,3 +92,18 @@ async def test_answer_endpoint_serves_repeat_from_cache(client, monkeypatch):
 
     assert gen.calls == 1
     assert second[-1][1]["cached"] and second[-1][1]["answer"] == first[-1][1]["answer"]
+
+
+async def test_abstained_answers_are_cached_until_the_corpus_changes(cache):
+    await bump_corpus_version(app.state.redis)
+    gen = FakeGenerator(["unused"])
+    weak = FakeRetriever(abstained=True)
+
+    async def ask():
+        return [e async for e in answer_events(weak, gen, "Best pizza topping?", cache=cache)]
+
+    first, second = await ask(), await ask()
+    assert first[-1][1]["abstained"] and second[-1][1]["cached"]
+
+    await bump_corpus_version(app.state.redis)  # e.g. a new document was ingested
+    assert not (await ask())[-1][1]["cached"]

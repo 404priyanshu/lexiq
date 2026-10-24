@@ -56,15 +56,20 @@ def pcts(values: list[float]) -> dict | None:
     return {"p50": round(q[49], 1), "p95": round(q[94], 1), "n": len(values)}
 
 
-async def bench(args, settings) -> dict:
+async def bench(args, settings, redis: Redis | None) -> dict:
     golden = [json.loads(line) for line in GOLDEN_PATH.read_text().splitlines()]
     questions = golden[: args.questions]
     docs = await document_ids_by_sha()
     doc_for = {d["contract"]: docs[d["sha256"]][0] for d in load_corpus() if d["sha256"] in docs}
+    # Contract-scoped numbers are only meaningful if every question can be scoped.
+    missing = {g["contract"] for g in questions} - doc_for.keys()
+    if args.scope == "document" and missing:
+        raise SystemExit(
+            f"{len(missing)} eval contracts not ingested (run `python -m app.evals.corpus`)"
+        )
 
     cache = None
-    if args.cache:
-        redis = Redis.from_url(settings.redis_url)
+    if redis is not None:
         await redis.incr(CORPUS_VERSION_KEY)  # start cold: no entries from earlier runs
         cache = QueryCache(redis, settings)
     retriever = Retriever.from_settings(engine, settings, cache)
@@ -143,9 +148,12 @@ def main() -> None:
     settings = settings_with(args.overrides)
 
     async def run():
+        redis = Redis.from_url(settings.redis_url) if args.cache else None
         try:
-            return await bench(args, settings)
+            return await bench(args, settings, redis)
         finally:
+            if redis is not None:
+                await redis.aclose()
             await engine.dispose()
 
     result = asyncio.run(run())
