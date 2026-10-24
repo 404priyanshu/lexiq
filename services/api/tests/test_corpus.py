@@ -51,3 +51,28 @@ def test_cfr_files_map_manifest_entries_to_titled_files(tmp_path):
     assert path.name == "CFR-2025-title17-vol1.pdf"
     assert title == "2025 CFR Title 17, Volume 1"
     assert url == "https://example.test/v1.pdf"
+
+
+def test_cfr_fetch_leaves_a_caller_supplied_client_open(tmp_path):
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404)))
+    fetch(2025, [17], client=client, data_dir=tmp_path, pause_s=0)
+
+    assert not client.is_closed
+    client.close()
+
+
+async def test_bulk_wait_times_out_naming_unfinished_documents(clean_db):
+    import pytest
+
+    from app.db import SessionLocal
+    from app.ingest.bulk import wait
+    from app.models import Document
+
+    async with SessionLocal() as session:
+        doc = Document(title="Stuck MSA", mime_type="application/pdf", sha256="stuck-sha",
+                       status="processing")  # fmt: skip
+        session.add(doc)
+        await session.commit()
+
+    with pytest.raises(TimeoutError, match=r"1 documents unfinished.*Stuck MSA \(processing\)"):
+        await wait([doc.id], interval=0, max_wait_s=0)

@@ -62,7 +62,10 @@ async def enqueue(files: list[tuple[Path, str, str | None]]) -> list[uuid.UUID]:
     return ids
 
 
-async def wait(ids: list[uuid.UUID], interval: float = 30) -> None:
+async def wait(ids: list[uuid.UUID], interval: float = 30, max_wait_s: float = 4 * 3600) -> None:
+    """Report progress until every document is ready or failed. Raises TimeoutError if that
+    hasn't happened within `max_wait_s` seconds (e.g. the worker died mid-job and left a document
+    in `processing`), naming the documents still unfinished."""
     started = time.perf_counter()
     while True:
         async with SessionLocal() as session:
@@ -86,6 +89,20 @@ async def wait(ids: list[uuid.UUID], interval: float = 30) -> None:
         )
         if done == len(ids):
             return
+        if elapsed >= max_wait_s:
+            async with SessionLocal() as session:
+                stuck = (
+                    await session.execute(
+                        select(Document.title, Document.status).where(
+                            Document.id.in_(ids),
+                            Document.status.not_in([DocumentStatus.ready, DocumentStatus.failed]),
+                        )
+                    )
+                ).all()
+            names = ", ".join(f"{t} ({s.value})" for t, s in stuck[:5])
+            raise TimeoutError(
+                f"{len(stuck)} documents unfinished after {max_wait_s:.0f}s: {names}"
+            )
         await asyncio.sleep(interval)
 
 
@@ -94,6 +111,9 @@ def main() -> None:
     parser.add_argument("corpus", choices=["cuad", "cfr"])
     parser.add_argument("--manifest", type=Path, default=REPO_ROOT / "corpora/cfr-2025.json")
     parser.add_argument("--no-wait", action="store_true")
+    parser.add_argument(
+        "--timeout", type=float, default=4 * 3600, help="give up waiting after this many seconds"
+    )
     args = parser.parse_args()
 
     files = cuad_files() if args.corpus == "cuad" else cfr_files(args.manifest)
@@ -102,7 +122,7 @@ def main() -> None:
         try:
             ids = await enqueue(files)
             if not args.no_wait:
-                await wait(ids)
+                await wait(ids, max_wait_s=args.timeout)
         finally:
             await engine.dispose()
 

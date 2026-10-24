@@ -8,6 +8,7 @@ Usage: uv run python -m app.corpus.cfr --year 2025 --titles 12 17 26
 """
 
 import argparse
+import contextlib
 import hashlib
 import json
 import time
@@ -34,8 +35,10 @@ def fetch(
 ) -> list[dict]:
     data_dir.mkdir(parents=True, exist_ok=True)
     entries = []
+    # Close only a client we created; a caller's client stays usable after fetch returns.
+    owned = client is None
     client = client or httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=120)
-    with client:
+    with client if owned else contextlib.nullcontext(client):
         for title in titles:
             for volume in range(1, MAX_VOLUMES + 1):
                 pkg = f"CFR-{year}-title{title}-vol{volume}"
@@ -46,7 +49,11 @@ def fetch(
                     resp = client.get(url, follow_redirects=False)
                     if resp.status_code != 200 or not resp.content.startswith(b"%PDF"):
                         break
-                    path.write_bytes(resp.content)
+                    # Write then rename, so an interrupted download never leaves a truncated
+                    # PDF that later runs would treat as cached.
+                    tmp = path.with_suffix(".part")
+                    tmp.write_bytes(resp.content)
+                    tmp.replace(path)
                     time.sleep(pause_s)  # be gentle with govinfo
                 data = path.read_bytes()
                 with pymupdf.open(stream=data, filetype="pdf") as doc:
