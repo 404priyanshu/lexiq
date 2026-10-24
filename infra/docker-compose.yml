@@ -1,0 +1,36 @@
+name: lexiq
+
+services:
+  postgres:
+    # ParadeDB = Postgres 17 + pg_search (BM25) + pgvector
+    image: paradedb/paradedb:0.26.0-pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lexiq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lexiq}
+      POSTGRES_DB: ${POSTGRES_DB:-lexiq}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8.6.7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+  redisdata:
