@@ -13,13 +13,19 @@ from app.ml.runtime import MAX_LENGTH, bert_feeds, load_tokenizer, onnx_session
 
 
 class Reranker:
-    def __init__(self, spec: ModelSpec = RERANKER, batch_size: int = 16):
+    def __init__(
+        self,
+        spec: ModelSpec = RERANKER,
+        batch_size: int = 16,
+        max_length: int = MAX_LENGTH,
+        int8: bool = False,
+    ):
         self.batch_size = batch_size
         self.tokenizer = load_tokenizer(spec)
         # Never cut the query; trim the passage if the pair overflows.
-        self.tokenizer.enable_truncation(MAX_LENGTH, strategy="only_second")
+        self.tokenizer.enable_truncation(min(max_length, MAX_LENGTH), strategy="only_second")
         self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
-        self.session = onnx_session(spec)
+        self.session = onnx_session(spec, int8=int8)
 
     def score(self, query: str, passages: Sequence[str]) -> np.ndarray:
         """Raw logits, one per passage, in input order."""

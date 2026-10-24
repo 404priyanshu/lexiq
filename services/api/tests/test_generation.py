@@ -173,6 +173,7 @@ def parse_sse(body: str) -> list[tuple[str, dict]]:
 
 
 async def test_answer_endpoint_streams_sse(client, monkeypatch):
+    monkeypatch.setattr(app.state, "cache", None)
     monkeypatch.setattr(app.state, "retriever", FakeRetriever())
     monkeypatch.setattr(app.state, "generator", FakeGenerator(["Delaware law governs [2]."]))
 

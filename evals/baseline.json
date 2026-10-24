@@ -1,23 +1,23 @@
 {
   "metrics": {
     "retrieval.recall@1": {
-      "value": 0.4518,
+      "value": 0.4588,
       "tolerance": 0.03
     },
     "retrieval.recall@5": {
-      "value": 0.7647,
+      "value": 0.7624,
       "tolerance": 0.02
     },
     "retrieval.recall@8": {
-      "value": 0.8259,
+      "value": 0.8329,
       "tolerance": 0.02
     },
     "retrieval.mrr@10": {
-      "value": 0.5861,
+      "value": 0.5884,
       "tolerance": 0.02
     },
     "retrieval_abstain.false_abstain_rate": {
-      "value": 0.0118,
+      "value": 0.0141,
       "tolerance": 0.01,
       "direction": "lower"
     },

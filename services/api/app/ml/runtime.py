@@ -24,14 +24,18 @@ def load_tokenizer(spec: ModelSpec) -> Tokenizer:
     return tok
 
 
-def onnx_session(spec: ModelSpec) -> ort.InferenceSession:
+def onnx_session(spec: ModelSpec, int8: bool = False) -> ort.InferenceSession:
+    filename = spec.int8_file if int8 else spec.onnx_file
+    if filename is None:
+        raise ValueError(f"{spec.name} has no int8 variant")
+    path = spec.path / filename
+    if not path.exists():
+        raise FileNotFoundError(f"{path} missing; run `uv run python -m app.ml.download`")
     opts = ort.SessionOptions()
     opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     # Idle intra-op threads otherwise busy-wait, pinning every core between requests.
     opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
-    return ort.InferenceSession(
-        str(spec.path / spec.onnx_file), opts, providers=["CPUExecutionProvider"]
-    )
+    return ort.InferenceSession(str(path), opts, providers=["CPUExecutionProvider"])
 
 
 def bert_feeds(enc: list[Encoding], session: ort.InferenceSession) -> dict[str, np.ndarray]:

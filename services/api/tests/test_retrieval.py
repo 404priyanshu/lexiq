@@ -1,70 +1,11 @@
-import hashlib
-
 import pytest
-from sqlalchemy import insert
 
 from app.config import get_settings
 from app.db import SessionLocal, engine
-from app.models import Chunk, Document
+from app.models import Chunk
 from app.retrieval.retriever import Retriever
 from app.retrieval.search import bm25_search, dense_search, rrf
-
-CORPUS = {
-    "Master Services Agreement": [
-        "Governing Law. This Agreement shall be governed by and construed in accordance with the "
-        "laws of the State of Delaware, without regard to its conflict of laws principles.",
-        "Indemnification. Supplier shall defend, indemnify and hold harmless Customer from any "
-        "third-party claims arising out of Supplier's gross negligence or willful misconduct.",
-        "Termination for Convenience. Either party may terminate this Agreement upon ninety (90) "
-        "days' prior written notice to the other party.",
-        "Confidentiality. Each party shall keep the other party's Confidential Information "
-        "secret for a period of five years after disclosure.",
-    ],
-    "Office Lease": [
-        "Rent. Tenant shall pay monthly base rent of $12,500 on the first day of each month.",
-        "Security Deposit. Tenant shall deposit an amount equal to two months' rent, refundable "
-        "within 30 days after the lease ends.",
-        "Governing Law. This Lease is governed by the laws of the State of New York.",
-    ],
-}
-
-
-@pytest.fixture
-async def corpus(clean_db, models) -> dict[str, Document]:
-    """Insert CORPUS with real embeddings, one chunk per passage on its own page."""
-    docs = {}
-    async with SessionLocal() as session:
-        for title, passages in CORPUS.items():
-            doc = Document(
-                title=title,
-                mime_type="text/plain",
-                sha256=hashlib.sha256(title.encode()).hexdigest(),
-                page_count=len(passages),
-                status="ready",
-            )
-            session.add(doc)
-            await session.flush()
-            vectors = models.embedder.embed_documents(passages)
-            await session.execute(
-                insert(Chunk),
-                [
-                    {
-                        "document_id": doc.id,
-                        "ordinal": i,
-                        "page_start": i + 1,
-                        "page_end": i + 1,
-                        "char_start": 0,
-                        "char_end": len(p),
-                        "content": p,
-                        "token_count": len(p.split()),
-                        "embedding": v,
-                    }
-                    for i, (p, v) in enumerate(zip(passages, vectors, strict=True))
-                ],
-            )
-            docs[title] = doc
-        await session.commit()
-    return docs
+from tests.data import CORPUS
 
 
 @pytest.fixture

@@ -7,12 +7,11 @@ from arq.connections import RedisSettings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.cache import QueryCache
 from app.config import get_settings
 from app.db import engine
 from app.generation.generator import ClaudeGenerator
-from app.ml.embedder import Embedder
 from app.ml.registry import EMBEDDER, RERANKER
-from app.ml.reranker import Reranker
 from app.ml.runtime import model_path_exists
 from app.retrieval.retriever import Retriever
 from app.routes import answer, documents, health, search
@@ -25,8 +24,9 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     # ArqRedis is a redis.asyncio.Redis that can also enqueue jobs.
     app.state.redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+    app.state.cache = QueryCache(app.state.redis, settings) if settings.cache_enabled else None
     if model_path_exists(EMBEDDER) and model_path_exists(RERANKER):
-        app.state.retriever = Retriever(engine, Embedder(), Reranker(), settings)
+        app.state.retriever = Retriever.from_settings(engine, settings, app.state.cache)
     else:
         app.state.retriever = None
         log.warning("ONNX models missing; /search disabled until `make models` is run")

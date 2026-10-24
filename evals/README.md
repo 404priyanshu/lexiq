@@ -56,6 +56,12 @@ uv run python -m app.evals.run --answers 100      # + generation and LLM judge o
 uv run python -m app.evals.gate ../../evals/runs/<run>/summary.json
 ```
 
+To score a configuration without editing code, override any `Settings` field for one run:
+
+```bash
+uv run python -m app.evals.run --set rerank_candidates=15 --set reranker_int8=true
+```
+
 When a change improves the scores on purpose, accept the new numbers by updating the
 baseline in the same pull request:
 
