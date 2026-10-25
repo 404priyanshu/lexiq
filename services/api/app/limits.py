@@ -26,9 +26,10 @@ BUDGET_MESSAGE = (
 
 
 async def _count(redis: Redis, key: str, window_s: int) -> int:
-    count = await redis.incr(key)
-    if count == 1:
-        await redis.expire(key, window_s)
+    # One transaction, so a key can never be left without a TTL (which would block that
+    # client until Redis restarts); NX keeps the first request's expiry for the window.
+    async with redis.pipeline(transaction=True) as pipe:
+        count, _ = await pipe.incr(key).expire(key, window_s, nx=True).execute()
     return count
 
 

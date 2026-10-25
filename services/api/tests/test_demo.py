@@ -77,6 +77,18 @@ async def test_read_only_caps_answer_passages(client, demo, fresh_limits, monkey
     monkeypatch.setattr(app.state, "generator", FakeGenerator(["Ninety days [1]."]))
     await client.post("/answer", json={"query": "q", "top_k": 50})
     assert seen["top_k"] == s.top_k
+    await client.post("/answer", json={"query": "q2"})
+    assert seen["top_k"] == s.top_k
+
+
+async def test_every_limit_key_gets_its_window_as_ttl(client, demo, fresh_limits, monkeypatch):
+    demo(search_limit_per_minute=5)
+    monkeypatch.setattr(app.state, "retriever", FakeRetriever())
+    for _ in range(2):
+        await client.post("/search", json={"query": "q"})
+    (key,) = await app.state.redis.keys("lexiq:rl:search:minute:*")
+    assert int(await app.state.redis.get(key)) == 2
+    assert 0 < await app.state.redis.ttl(key) <= 60
 
 
 async def test_budget_stops_model_calls_but_still_shows_sources(client, fresh_limits):

@@ -31,9 +31,9 @@ async def answer(request: Request, body: SearchRequest) -> StreamingResponse:
 
     top_k = body.top_k
     settings = request.app.state.settings
-    if settings.read_only and top_k is not None:
+    if settings.read_only:
         # More passages means a longer, costlier prompt; the public demo sticks to the default.
-        top_k = min(top_k, settings.top_k)
+        top_k = min(top_k or settings.top_k, settings.top_k)
 
     async def stream():
         try:
