@@ -22,15 +22,15 @@
       "direction": "lower"
     },
     "answers.faithfulness": {
-      "value": 0.9744,
+      "value": 0.9615,
       "tolerance": 0.03
     },
     "answers.answer_correctness": {
-      "value": 0.8519,
+      "value": 0.8642,
       "tolerance": 0.05
     },
     "answers.abstain_recall": {
-      "value": 0.6842,
+      "value": 0.7895,
       "tolerance": 0.1
     },
     "answers.citation_valid_rate": {

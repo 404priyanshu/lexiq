@@ -142,14 +142,16 @@ export function AskPanel() {
           {done?.abstained && (
             <Callout tone="neutral">
               The documents don&apos;t contain enough to answer this.
-              {sources.length > 0 && " The closest passages are below."}
+              {answer
+                ? " The answer above describes the closest related provisions."
+                : sources.length > 0 && " The closest passages are below."}
             </Callout>
           )}
           {done?.refused && (
             <Callout tone="warn">The model declined to answer this question.</Callout>
           )}
           {done?.truncated && <Callout tone="warn">The answer was cut off.</Callout>}
-          {done?.citations && done.citations.cited.length === 0 && (
+          {done?.citations && done.citations.cited.length === 0 && !done.abstained && (
             <Callout tone="warn">This answer has no citations; treat it with caution.</Callout>
           )}
           {notice && <Callout tone="neutral">{notice}</Callout>}

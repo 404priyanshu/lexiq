@@ -195,23 +195,30 @@ Judged on the first 100 golden questions (81 answerable, 19 unanswerable), with
 
 | Metric | Value |
 |---|---|
-| Faithfulness: every claim supported by the given sources | 0.974 |
-| Answer correctness: agrees with CUAD's lawyer-marked evidence | 0.852 |
+| Faithfulness: every claim supported by the given sources | 0.962 |
+| Answer correctness: agrees with CUAD's lawyer-marked evidence | 0.864 |
 | Citations valid (no out-of-range `[n]`) | 1.000 |
 | Sentences carrying a citation | 0.50 |
-| Unanswerable questions correctly declined | 0.684 (13 of 19) |
-| Declines that were right to decline | 0.565 (13 of 23) |
+| Unanswerable questions correctly declined | 0.789 (15 of 19) |
+| Declines that were right to decline | 0.500 (15 of 30) |
+| Wrong declines when the gold clause was in the sources | 0.123 (8 of 65) |
 
 A model grading its own answers can be lenient, so faithfulness is best read as an upper
-bound. Abstaining is the weak spot: the model declined 10 answerable questions and answered 6
-that CUAD marks as having no such clause.
+bound. A decline counts whether the model replies with the sentinel or writes it out: models
+often open with "The sources do not mention X" and then describe the nearest related
+provision, and the API now flags those answers as abstained (keeping the text) instead of
+presenting them as answers ([`declines.py`](services/api/app/generation/declines.py)). Of the
+15 declines on answerable questions, 7 are retrieval misses where the gold clause never reached
+the model, so declining was right. The run cost $0.29 ($0.16 answers, $0.13 judging), and its
+numbers are the answer baselines in `evals/baseline.json`; CI gates on them only when a key is
+configured, and doesn't have one.
 
-Tuning the declines, on questions 100–199 with 0–99 held out for confirmation:
+Tuning the declines, on questions 100–199 with 0–99 held out for confirmation. These runs
+predate counting written-out declines; the last row rescores them.
 
 - About half of the wrong declines aren't model errors: the gold clause never reached the
-  model (missed by retrieval, or ranked 9th–10th of the 8 passages sent). Declining was right.
-  The eval now reports this split as `answers.given_evidence`. With the clause in front of it,
-  `gpt-4.1-mini` wrongly declined 3 of 68 tuning questions.
+  model (missed by retrieval, or ranked 9th–10th of the 8 passages sent). The eval reports
+  this split as `answers.given_evidence`.
 - Stricter decline wording in the prompt (decide relevance first, don't recast unrelated
   provisions) changed nothing: the same 3 wrong declines and 6 missed ones.
 - Sending all 10 reranked passages instead of 8 raised answer correctness (tuning 0.816 →
@@ -226,20 +233,20 @@ Tuning the declines, on questions 100–199 with 0–99 held out for confirmatio
   | Faithfulness | 0.890 | 0.943 |
   | Answer correctness | 0.816 | 0.851 |
   | Sentences carrying a citation | 0.53 | 0.68 |
-  | Unanswerable correctly declined (judge) | 7 of 13 | 4 of 13 |
   | First token p50 / p95 | 0.69 / 1.00 s | 0.97 / 1.53 s |
   | Complete answer p95 | 2.29 s | 3.55 s |
   | Answer cost per query | $0.0016 | $0.0004 |
+  | Unanswerable correctly declined, sentinel only | 7 of 13 | 4 of 13 |
+  | Same, counting written-out declines | 7 of 13 | 7 of 13 |
+  | Wrong declines with the gold clause in the sources | 5 of 68 | 9 of 68 |
 
-  `gpt-6-luna` rarely uses the decline sentinel: it writes the decline in prose and then
-  describes the nearest related provision ("The agreement does not state a general
-  non-compete restriction. It does prohibit..."), which the judge doesn't count as declining.
-  Better answers at a quarter of the cost, but slower; `gpt-4.1-mini` stays the default.
+  `gpt-6-luna` rarely uses the sentinel and writes its declines out, which is why it looked
+  worse at declining before they were counted. Counted, it catches as many unanswerable
+  questions but wrongly declines nearly twice as often; with the slower answers,
+  `gpt-4.1-mini` stays the default.
 - Several remaining "missed" declines are label disagreements: asked when the initial term
   ends, the model answers "two years from November 15, 2012", where CUAD marks the contract as
-  having no expiration-date clause. The run cost $0.29 ($0.16 answers, $0.13 judging).
-These are the answer baselines in `evals/baseline.json`; CI gates on them only when a key is
-configured, and doesn't have one.
+  having no expiration-date clause.
 
 ## Data
 
