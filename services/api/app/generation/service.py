@@ -4,7 +4,9 @@ Events, in order:
   sources  the passages given to the model, numbered as the model sees them
   delta    answer text as it streams (zero or more)
   notice   a model fallback happened mid-answer (rare; informational)
-  done     final answer, citation check, abstain/refusal/cached flags, usage, timings
+  done     final answer, citation check, abstain/refusal/cached flags, usage, timings. An
+           abstain either has no answer (retrieval or the model's sentinel) or keeps an answer
+           that opens by saying the sources don't cover the question.
   error    replaces `done` if generation fails
 """
 
@@ -15,6 +17,7 @@ from collections.abc import AsyncIterator, Sequence
 from typing import TYPE_CHECKING, Any
 
 from app.generation.citations import check_citations
+from app.generation.declines import declines_in_prose
 from app.generation.generator import (
     Completion,
     FallbackNotice,
@@ -195,4 +198,7 @@ async def _answer_events(
                 "coverage": round(check.coverage, 3),
             },
         }
+        if declines_in_prose(answer):
+            # The text stays: it usually goes on to describe the nearest related provision.
+            done |= {"abstained": True, "abstain_reason": "model: says the sources don't cover it"}
     yield "done", done
