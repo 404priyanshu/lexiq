@@ -9,6 +9,8 @@ sources say counts, and only one without a citation: "The agreement does not per
 
 import re
 
+from app.generation.citations import citation_numbers
+
 _SUBJECT = (
     r"(?:the |these |this )?(?:provided |cited |given |available )?"
     r"(?:sources?|excerpts?|passages?|provisions?|documents?|text|agreement|contract)"
@@ -25,7 +27,6 @@ _DECLINE = re.compile(
     rf"|^{_SUBJECT} (?:contains?|provides?|includes?|makes?) no\b",
     re.IGNORECASE,
 )
-_CITATION = re.compile(r"\[\d+(?:\]\[\d+)*\]")
 
 
 def first_sentence(text: str) -> str:
@@ -36,4 +37,5 @@ def first_sentence(text: str) -> str:
 def declines_in_prose(answer: str) -> bool:
     """True when the answer opens by saying the sources don't contain what was asked."""
     first = first_sentence(answer)
-    return not _CITATION.search(first) and bool(_DECLINE.match(first))
+    # Same citation syntax as the citation check: [1], [1][2] and [1, 2].
+    return not citation_numbers(first) and bool(_DECLINE.match(first))

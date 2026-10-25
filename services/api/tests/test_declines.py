@@ -28,6 +28,7 @@ def test_detects_declines_written_as_prose(answer):
         "Neither party may assign the agreement without written consent [1].",
         # Cited: the model is answering from a source.
         "The sources do not state a cap, but liability excludes indirect damages [4].",
+        "The sources do not state a cap, but liability excludes indirect damages [1, 2].",
         # The decline comes after an answer.
         "Licensee may audit once a year [1]. The sources do not specify the notice period.",
         "Either party may terminate on ninety days' notice [1].",
