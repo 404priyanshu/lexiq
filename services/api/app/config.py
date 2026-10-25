@@ -1,7 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -58,8 +59,12 @@ class Settings(BaseSettings):
     # answerable ones), so the model's INSUFFICIENT_EVIDENCE path does the real abstaining.
     abstain_min_relevance: float = 0.0001
 
-    # Generation. Read from .env here (not os.environ), so it's passed to the client explicitly.
+    # Generation. Keys are read from .env here (not os.environ), so they're passed to the client
+    # explicitly. The provider defaults to whichever key is set (Anthropic if both are), and
+    # the models default to that provider's (see _resolve_provider).
+    llm_provider: Literal["anthropic", "openai"] | None = None
     anthropic_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
     llm_model: str = "claude-opus-5-5"
     # Grounded QA over a handful of passages is latency-sensitive and needs little reasoning.
     llm_effort: str = "low"
@@ -67,6 +72,8 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 16000
     llm_fallbacks: bool = True
     judge_model: str = "claude-opus-5-5"
+    # Only for OpenAI reasoning models (gpt-5 and later); non-reasoning models reject it.
+    openai_reasoning_effort: str | None = None
 
     # Redis caches (app.cache). Keys carry the corpus version, so TTLs only bound memory.
     cache_enabled: bool = True
@@ -74,6 +81,31 @@ class Settings(BaseSettings):
     cache_answer_ttl_s: int = 86400
 
     cors_origins: list[str] = ["http://localhost:3000"]
+
+    @model_validator(mode="after")
+    def _resolve_provider(self) -> "Settings":
+        # Written to __dict__ so resolved values don't count as explicitly set, and
+        # settings_with() can re-resolve them when an override changes the provider.
+        if self.llm_provider is None:
+            only_openai = _has(self.openai_api_key) and not _has(self.anthropic_api_key)
+            self.__dict__["llm_provider"] = "openai" if only_openai else "anthropic"
+        if self.llm_provider == "openai":
+            for field in ("llm_model", "judge_model"):
+                if field not in self.model_fields_set:
+                    self.__dict__[field] = OPENAI_DEFAULT_MODEL
+        return self
+
+    def llm_api_key(self) -> str:
+        key = self.openai_api_key if self.llm_provider == "openai" else self.anthropic_api_key
+        return key.get_secret_value() if key else ""
+
+
+# Fast, non-reasoning, and cheap enough to run the judged eval on a few dollars of credit.
+OPENAI_DEFAULT_MODEL = "gpt-4.1-mini"
+
+
+def _has(key: SecretStr | None) -> bool:
+    return bool(key and key.get_secret_value())
 
 
 @lru_cache
@@ -90,4 +122,4 @@ def settings_with(overrides: list[str]) -> Settings:
             raise ValueError(f"bad override {item!r}; expected KEY=VALUE with a Settings field")
         updates[key] = value
     # Init kwargs take precedence over env and .env, and are validated/coerced like them.
-    return Settings(**{**get_settings().model_dump(), **updates})
+    return Settings(**{**get_settings().model_dump(exclude_unset=True), **updates})

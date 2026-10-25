@@ -39,7 +39,10 @@ infra/               docker-compose: ParadeDB Postgres (pgvector + pg_search), R
 - Golden set: built from CUAD's lawyer annotations rather than LLM-drafted questions, including
   75 unanswerable questions where CUAD records a clause is absent.
 - BM25: ParadeDB `pg_search` (real BM25), not Postgres `ts_rank`.
-- LLM: Claude via the Anthropic SDK, model set in config.
+- LLM: Claude via the Anthropic SDK, or OpenAI (`gpt-4.1-mini` by default) via Chat Completions;
+  the provider follows whichever key is set. OpenAI was added so answers and the judged eval
+  could be measured on a few dollars of credit. Both generate the answer and grade it, so the
+  judge can be lenient toward its own model's answers.
 - CI: retrieval metrics on all 500 questions every PR; LLM-judge faithfulness on a fixed
   100-question subset per PR, full 500 on `main`.
 - Reported numbers come from `bench/` and `evals/` runs, not targets.

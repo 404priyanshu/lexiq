@@ -196,15 +196,12 @@ async def test_answer_endpoint_503_without_api_key(client, monkeypatch):
 
 
 @pytest.mark.skipif(os.environ.get("LEXIQ_LIVE_TESTS") != "1", reason="live API test")
-async def test_live_claude_answers_with_valid_citations():
-    from anthropic import AsyncAnthropic
+async def test_live_model_answers_with_valid_citations():
+    from app.generation.generator import make_generator
 
-    from app.generation.generator import ClaudeGenerator
-
-    s = get_settings()
-    if not s.anthropic_api_key or not s.anthropic_api_key.get_secret_value():
-        pytest.skip("ANTHROPIC_API_KEY not set")
-    gen = ClaudeGenerator(AsyncAnthropic(api_key=s.anthropic_api_key.get_secret_value()), s)
+    gen = make_generator(get_settings())
+    if gen is None:
+        pytest.skip("no ANTHROPIC_API_KEY or OPENAI_API_KEY set")
 
     events = await collect(FakeRetriever(), gen, "How much notice is needed to terminate?")
     done = events[-1][1]

@@ -30,7 +30,7 @@ flowchart LR
     X -. names a document .-> RT[Stage 2: search that document with the names removed] --> G
     B & D --> F[RRF fusion] --> X[int8 cross-encoder rerank]
     X -->|best passage irrelevant| A1[Abstain]
-    X --> G[Claude: numbered sources, cite every claim] -->|SSE| UI[Web UI with citation chips]
+    X --> G[LLM: numbered sources, cite every claim] -->|SSE| UI[Web UI with citation chips]
     G -->|sources insufficient| A1
   end
   DB --> B & D
@@ -40,8 +40,9 @@ flowchart LR
   at pages, strips running headers and footers, and chunks by embedder tokens with overlap.
 - **Retrieval** runs BM25 and dense search in parallel, fuses them with Reciprocal Rank
   Fusion, and reranks the top 10 with a local int8 cross-encoder: no per-query API cost.
-- **Generation** gives Claude numbered passages and requires a `[n]` citation on every factual
-  sentence; citations are validated afterwards. Answers stream over server-sent events.
+- **Generation** gives the model numbered passages and requires a `[n]` citation on every
+  factual sentence; citations are validated afterwards. Answers stream over server-sent events.
+  Claude or an OpenAI model, whichever key is set (`LLM_PROVIDER` picks when both are).
 - **Two-stage retrieval** handles corpus-wide questions that name a document ("In the Supply
   Agreement between Acme and Globex, ..."): stage 1 finds the document, stage 2 searches it
   with the identifying words removed, so the preamble that repeats the names doesn't crowd out
@@ -59,7 +60,8 @@ flowchart LR
 
 ## Run locally
 
-Requires Docker, [uv](https://docs.astral.sh/uv/), pnpm, and an `ANTHROPIC_API_KEY` in `.env`.
+Requires Docker, [uv](https://docs.astral.sh/uv/), pnpm, and an `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` in `.env` for answers (search works without one).
 
 ```bash
 make setup         # .env, deps, ONNX models, containers, migrations
@@ -172,8 +174,72 @@ routing accuracy.
 Index size at 52k pages: 341 MB of chunk rows, 237 MB HNSW index, 84 MB BM25 index.
 
 Anthropic prompt caching isn't used: the system prompt is below the minimum cacheable length
-and the sources differ per question. End-to-end answer latency, $/query and the LLM-judged
-answer metrics need `ANTHROPIC_API_KEY` and haven't been measured yet.
+and the sources differ per question.
+
+### Answers
+
+End to end with `gpt-4.1-mini` writing the answer: 100 golden questions run one at a time
+against the 52,650-page index, contract-scoped (`make bench` with `--answers`).
+
+| Stage | p50 | p95 |
+|---|---|---|
+| Retrieval | 216 ms | 227 ms |
+| First answer token | 902 ms | 1,118 ms |
+| Complete answer | 1,404 ms | 2,366 ms |
+
+**$0.0016 per query** at OpenAI's standard pricing (mean 3,652 input and 98 output tokens);
+retrieval and reranking run locally and add nothing.
+
+Judged on the first 100 golden questions (81 answerable, 19 unanswerable), with
+`gpt-4.1-mini` also as the judge:
+
+| Metric | Value |
+|---|---|
+| Faithfulness: every claim supported by the given sources | 0.974 |
+| Answer correctness: agrees with CUAD's lawyer-marked evidence | 0.852 |
+| Citations valid (no out-of-range `[n]`) | 1.000 |
+| Sentences carrying a citation | 0.50 |
+| Unanswerable questions correctly declined | 0.684 (13 of 19) |
+| Declines that were right to decline | 0.565 (13 of 23) |
+
+A model grading its own answers can be lenient, so faithfulness is best read as an upper
+bound. Abstaining is the weak spot: the model declined 10 answerable questions and answered 6
+that CUAD marks as having no such clause.
+
+Tuning the declines, on questions 100–199 with 0–99 held out for confirmation:
+
+- About half of the wrong declines aren't model errors: the gold clause never reached the
+  model (missed by retrieval, or ranked 9th–10th of the 8 passages sent). Declining was right.
+  The eval now reports this split as `answers.given_evidence`. With the clause in front of it,
+  `gpt-4.1-mini` wrongly declined 3 of 68 tuning questions.
+- Stricter decline wording in the prompt (decide relevance first, don't recast unrelated
+  provisions) changed nothing: the same 3 wrong declines and 6 missed ones.
+- Sending all 10 reranked passages instead of 8 raised answer correctness (tuning 0.816 →
+  0.874, held-out 0.852 → 0.877), but on held-out questions the model also answered more that
+  have no such clause (13 → 10 of 19 correctly declined). A confident wrong answer is worse
+  than a wrong decline here, and the differences are 2–3 questions, so `top_k` stays at 8.
+- Switching the answer model to `gpt-6-luna` (reasoning effort low; `gpt-4.1-mini` still
+  judging) on the tuning slice:
+
+  | | `gpt-4.1-mini` | `gpt-6-luna` |
+  |---|---|---|
+  | Faithfulness | 0.890 | 0.943 |
+  | Answer correctness | 0.816 | 0.851 |
+  | Sentences carrying a citation | 0.53 | 0.68 |
+  | Unanswerable correctly declined (judge) | 7 of 13 | 4 of 13 |
+  | First token p50 / p95 | 0.69 / 1.00 s | 0.97 / 1.53 s |
+  | Complete answer p95 | 2.29 s | 3.55 s |
+  | Answer cost per query | $0.0016 | $0.0004 |
+
+  `gpt-6-luna` rarely uses the decline sentinel: it writes the decline in prose and then
+  describes the nearest related provision ("The agreement does not state a general
+  non-compete restriction. It does prohibit..."), which the judge doesn't count as declining.
+  Better answers at a quarter of the cost, but slower; `gpt-4.1-mini` stays the default.
+- Several remaining "missed" declines are label disagreements: asked when the initial term
+  ends, the model answers "two years from November 15, 2012", where CUAD marks the contract as
+  having no expiration-date clause. The run cost $0.29 ($0.16 answers, $0.13 judging).
+These are the answer baselines in `evals/baseline.json`; CI gates on them only when a key is
+configured, and doesn't have one.
 
 ## Data
 

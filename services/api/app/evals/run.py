@@ -7,6 +7,7 @@ generation and the LLM judge.
 Usage:
   uv run python -m app.evals.run                    # retrieval, all 500 questions
   uv run python -m app.evals.run --answers 100      # + generation and judge on 100
+  uv run python -m app.evals.run --answers 100 --answers-from 100   # tuning slice
 """
 
 import argparse
@@ -18,16 +19,14 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from anthropic import AsyncAnthropic
-
 from app.config import REPO_ROOT, Settings, get_settings, settings_with
 from app.db import engine
 from app.evals.corpus import document_ids_by_sha, load_corpus
 from app.evals.golden import GOLDEN_PATH
 from app.evals.golden_corpus import CORPUS_GOLDEN_PATH
-from app.evals.judge import Judge
+from app.evals.judge import make_judge
 from app.evals.matching import first_hit
-from app.generation.generator import ClaudeGenerator
+from app.generation.generator import make_generator
 from app.generation.service import answer_events
 from app.models import DocumentStatus
 from app.retrieval.retriever import RetrievalResult, Retriever
@@ -77,6 +76,7 @@ async def evaluate(
     limit: int | None = None,
     settings: Settings | None = None,
     scope: str = "document",
+    answer_offset: int = 0,
 ) -> tuple[list[dict], dict]:
     """scope="document": golden questions, retrieval restricted to their contract.
     scope="corpus": contract-named questions, retrieval over every document.
@@ -97,12 +97,9 @@ async def evaluate(
     retriever = Retriever.from_settings(engine, s)
     generator = judge = None
     if answer_limit:
-        key = s.anthropic_api_key.get_secret_value() if s.anthropic_api_key else ""
-        if not key:
-            raise SystemExit("--answers needs ANTHROPIC_API_KEY")
-        client = AsyncAnthropic(api_key=key)
-        generator = ClaudeGenerator(client, s)
-        judge = Judge(client, s.judge_model)
+        generator, judge = make_generator(s), make_judge(s)
+        if generator is None or judge is None:
+            raise SystemExit("--answers needs ANTHROPIC_API_KEY or OPENAI_API_KEY")
 
     sem = asyncio.Semaphore(concurrency)
     done_count = 0
@@ -147,8 +144,13 @@ async def evaluate(
                 row["doc_rank"] = next(
                     (i for i, c in enumerate(res.chunks, start=1) if c.document_id == target), None
                 )
-        if generator and i < answer_limit:
+        if generator and answer_offset <= i < answer_offset + answer_limit:
             row["generation"] = await generate_and_judge(g, res)
+            if g["answerable"]:
+                # Was the gold clause among the passages the model saw? Declining is the right
+                # call when it wasn't, so this separates model errors from retrieval misses.
+                rank = row["rank"]["rerank"]
+                row["generation"]["evidence_in_sources"] = rank is not None and rank <= s.top_k
         return row
 
     async def generate_and_judge(g: dict, res: RetrievalResult) -> dict:
@@ -160,7 +162,13 @@ async def evaluate(
                 )
             ]
         sources = res.chunks[: s.top_k]
-        done = next(data for name, data in events if name == "done")
+        done = next((data for name, data in events if name == "done"), None)
+        if done is None:
+            # Generation failed after the SDK's own retries; keep the run going and leave this
+            # question out of the answer metrics rather than scoring it as wrong.
+            error = next((data for name, data in events if name == "error"), {})
+            log(f"generation failed for {g['id']}: {error.get('message')}")
+            return {"error": error.get("message", "no done event")}
         out = {
             "answer": done["answer"],
             "abstained": done["abstained"],
@@ -182,6 +190,9 @@ async def evaluate(
     rows = await asyncio.gather(*(one(i, g) for i, g in enumerate(golden)))
     log("all questions done")
     summary = summarize(rows, s.abstain_min_relevance)
+    if "answers" in summary:
+        summary["answers"]["models"] = {"answer": s.llm_model, "judge": s.judge_model}
+        summary["answers"]["questions"] = [answer_offset, answer_offset + answer_limit]
     summary["elapsed_s"] = round(time.perf_counter() - started, 1)
     return rows, summary
 
@@ -248,6 +259,8 @@ def _rate(items: list, pred) -> float | None:
 
 
 def summarize_answers(rows: list[dict]) -> dict:
+    errors = sum(1 for r in rows if "error" in r["generation"])
+    rows = [r for r in rows if "error" not in r["generation"]]
     gens = [r["generation"] for r in rows]
     judged = [g["judge"] for g in gens if g.get("judge")]
     cited = [g["citations"] for g in gens if g["citations"]]
@@ -262,14 +275,23 @@ def summarize_answers(rows: list[dict]) -> dict:
         j = r["generation"].get("judge")
         return bool(j and j["answers_question"] and not j["declined"])
 
+    given_evidence = [r for r in rows if r["generation"].get("evidence_in_sources")]
+
     return {
         "n": len(rows),
+        "errors": errors,
         "faithfulness": _rate(judged, lambda j: j["faithful"]),
         "answer_correctness": _rate([r for r in rows if r["answerable"]], correct),
         "abstain_precision": _rate(
             [r for r in rows if abstained(r)], lambda r: not r["answerable"]
         ),
         "abstain_recall": _rate([r for r in rows if not r["answerable"]], abstained),
+        # Answerable questions whose gold clause was in the sources the model saw.
+        "given_evidence": {
+            "n": len(given_evidence),
+            "false_abstain_rate": _rate(given_evidence, abstained),
+            "answer_correctness": _rate(given_evidence, correct),
+        },
         "citation_valid_rate": _rate(cited, lambda c: not c["invalid"]),
         "citation_coverage": round(statistics.mean(c["coverage"] for c in cited), 4)
         if cited
@@ -314,6 +336,10 @@ def print_summary(summary: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--answers", type=int, default=0, metavar="N")
+    parser.add_argument(
+        "--answers-from", type=int, default=0, metavar="I",
+        help="answer questions I..I+N-1 instead of the first N (e.g. a held-out tuning slice)",
+    )  # fmt: skip
     parser.add_argument("--concurrency", type=int, default=2)
     parser.add_argument("--limit", type=int, default=None, help="only the first N questions")
     parser.add_argument(
@@ -332,7 +358,10 @@ def main() -> None:
 
     async def run():
         try:
-            return await evaluate(args.answers, args.concurrency, args.limit, settings, args.scope)
+            return await evaluate(
+                args.answers, args.concurrency, args.limit, settings, args.scope,
+                args.answers_from,
+            )  # fmt: skip
         finally:
             await engine.dispose()
 

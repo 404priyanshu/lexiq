@@ -14,10 +14,14 @@ import uuid
 from collections.abc import AsyncIterator, Sequence
 from typing import TYPE_CHECKING, Any
 
-import anthropic
-
 from app.generation.citations import check_citations
-from app.generation.generator import Completion, FallbackNotice, Generator, TextDelta
+from app.generation.generator import (
+    Completion,
+    FallbackNotice,
+    GenerationError,
+    Generator,
+    TextDelta,
+)
 from app.generation.prompt import INSUFFICIENT
 from app.retrieval.retriever import Retriever
 
@@ -152,14 +156,11 @@ async def _answer_events(
                 yield "notice", {"fallback": {"from": event.from_model, "to": event.to_model}}
             elif isinstance(event, Completion):
                 completion = event
-    except anthropic.APIError as exc:
+    except GenerationError as exc:
         log.warning("generation failed: %s", exc)
-        retryable = isinstance(exc, anthropic.RateLimitError | anthropic.APIConnectionError) or (
-            isinstance(exc, anthropic.APIStatusError) and exc.status_code >= 500
-        )
         yield (
             "error",
-            {"message": "The answer model is unavailable right now.", "retryable": retryable},
+            {"message": "The answer model is unavailable right now.", "retryable": exc.retryable},
         )
         return
 
@@ -178,7 +179,8 @@ async def _answer_events(
         }
 
     if completion and completion.stop_reason == "refusal":
-        # Every model in the fallback chain declined; any partial text is not an answer.
+        # The model declined (for Claude, every model in the fallback chain did); any partial
+        # text is not an answer.
         done["refused"] = True
     elif answer.startswith(INSUFFICIENT):
         done |= {"abstained": True, "abstain_reason": "model: sources don't answer the question"}
