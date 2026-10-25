@@ -218,6 +218,23 @@ Tuning the declines, on questions 100–199 with 0–99 held out for confirmatio
   0.874, held-out 0.852 → 0.877), but on held-out questions the model also answered more that
   have no such clause (13 → 10 of 19 correctly declined). A confident wrong answer is worse
   than a wrong decline here, and the differences are 2–3 questions, so `top_k` stays at 8.
+- Switching the answer model to `gpt-6-luna` (reasoning effort low; `gpt-4.1-mini` still
+  judging) on the tuning slice:
+
+  | | `gpt-4.1-mini` | `gpt-6-luna` |
+  |---|---|---|
+  | Faithfulness | 0.890 | 0.943 |
+  | Answer correctness | 0.816 | 0.851 |
+  | Sentences carrying a citation | 0.53 | 0.68 |
+  | Unanswerable correctly declined (judge) | 7 of 13 | 4 of 13 |
+  | First token p50 / p95 | 0.69 / 1.00 s | 0.97 / 1.53 s |
+  | Complete answer p95 | 2.29 s | 3.55 s |
+  | Answer cost per query | $0.0016 | $0.0004 |
+
+  `gpt-6-luna` rarely uses the decline sentinel: it writes the decline in prose and then
+  describes the nearest related provision ("The agreement does not state a general
+  non-compete restriction. It does prohibit..."), which the judge doesn't count as declining.
+  Better answers at a quarter of the cost, but slower; `gpt-4.1-mini` stays the default.
 - Several remaining "missed" declines are label disagreements: asked when the initial term
   ends, the model answers "two years from November 15, 2012", where CUAD marks the contract as
   having no expiration-date clause. The run cost $0.29 ($0.16 answers, $0.13 judging).
