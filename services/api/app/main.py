@@ -10,6 +10,7 @@ from app.cache import QueryCache
 from app.config import get_settings
 from app.db import engine
 from app.generation.generator import make_generator
+from app.limits import BudgetedGenerator
 from app.ml.registry import EMBEDDER, RERANKER
 from app.ml.runtime import model_path_exists
 from app.retrieval.retriever import Retriever
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    app.state.settings = settings
     # ArqRedis is a redis.asyncio.Redis that can also enqueue jobs.
     app.state.redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
     app.state.cache = QueryCache(app.state.redis, settings) if settings.cache_enabled else None
@@ -34,6 +36,10 @@ async def lifespan(app: FastAPI):
         log.warning("no ANTHROPIC_API_KEY or OPENAI_API_KEY set; /answer disabled")
     else:
         log.info("answers from %s (%s)", settings.llm_model, settings.llm_provider)
+        if settings.daily_answer_budget:
+            app.state.generator = BudgetedGenerator(
+                app.state.generator, app.state.redis, settings.daily_answer_budget
+            )
     yield
     await app.state.redis.aclose()
     await engine.dispose()

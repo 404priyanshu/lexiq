@@ -163,7 +163,10 @@ async def _answer_events(
         log.warning("generation failed: %s", exc)
         yield (
             "error",
-            {"message": "The answer model is unavailable right now.", "retryable": exc.retryable},
+            {
+                "message": exc.public_message or "The answer model is unavailable right now.",
+                "retryable": exc.retryable,
+            },
         )
         return
 

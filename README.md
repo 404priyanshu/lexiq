@@ -52,6 +52,12 @@ flowchart LR
 - **Caching** keys reranked retrievals and finished answers by a corpus version that every
   ingest bumps, so cached results never outlive the documents they came from.
 
+## Public demo
+
+[docs/DEMO_PLAN.md](docs/DEMO_PLAN.md) covers hosting and cost; `infra/demo` has the
+production compose file, Caddy config and deploy scripts. The demo runs read-only with
+per-visitor rate limits and a daily cap on model calls, all off by default locally.
+
 ## Stack
 
 - `apps/web` — Next.js 16 (App Router, Tailwind)

@@ -18,10 +18,31 @@ export default function Home() {
         </Suspense>
       </header>
 
-      <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+      {/* grid-cols-1 is minmax(0, 1fr): without it the single mobile column grows to the
+          longest unbroken document title instead of truncating it. */}
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <DocumentsPanel />
-        <AskPanel />
+        {/* On phones the question box comes first, above a long document list. */}
+        <div className="order-first md:order-none">
+          <AskPanel />
+        </div>
       </div>
+
+      <footer className="mt-auto border-t border-foreground/10 pt-4 text-xs text-foreground/50">
+        Contracts from{" "}
+        <a className="underline" href="https://www.atticusprojectai.org/cuad">
+          CUAD v1
+        </a>
+        , © The Atticus Project,{" "}
+        <a className="underline" href="https://creativecommons.org/licenses/by/4.0/">
+          CC BY 4.0
+        </a>
+        . Regulations from the 2025 Code of Federal Regulations via{" "}
+        <a className="underline" href="https://www.govinfo.gov/app/collection/cfr">
+          govinfo.gov
+        </a>{" "}
+        (public domain). Answers are generated and can be wrong; check the cited passages.
+      </footer>
     </main>
   );
 }

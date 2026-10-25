@@ -1,10 +1,11 @@
 import json
 import logging
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.generation.service import answer_events
+from app.limits import rate_limit
 from app.routes.search import SearchRequest
 
 router = APIRouter(tags=["answer"])
@@ -15,7 +16,7 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-@router.post("/answer")
+@router.post("/answer", dependencies=[Depends(rate_limit("answer"))])
 async def answer(request: Request, body: SearchRequest) -> StreamingResponse:
     """Server-sent events; see app.generation.service for the event sequence."""
     retriever = getattr(request.app.state, "retriever", None)
@@ -28,13 +29,19 @@ async def answer(request: Request, body: SearchRequest) -> StreamingResponse:
             "No LLM API key is set (ANTHROPIC_API_KEY or OPENAI_API_KEY)",
         )
 
+    top_k = body.top_k
+    settings = request.app.state.settings
+    if settings.read_only and top_k is not None:
+        # More passages means a longer, costlier prompt; the public demo sticks to the default.
+        top_k = min(top_k, settings.top_k)
+
     async def stream():
         try:
             async for event, data in answer_events(
                 retriever,
                 generator,
                 body.query,
-                body.top_k,
+                top_k,
                 body.document_ids,
                 cache=getattr(request.app.state, "cache", None),
             ):

@@ -1,8 +1,10 @@
 import uuid
 from dataclasses import asdict
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
+
+from app.limits import rate_limit
 
 router = APIRouter(tags=["search"])
 
@@ -47,7 +49,7 @@ class SearchResponse(BaseModel):
     focused_query: str | None = None
 
 
-@router.post("/search")
+@router.post("/search", dependencies=[Depends(rate_limit("search"))])
 async def search(request: Request, body: SearchRequest) -> SearchResponse:
     retriever = getattr(request.app.state, "retriever", None)
     if retriever is None:

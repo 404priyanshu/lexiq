@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import text
 
 from app.db import engine
+from app.demo import EXAMPLES
 
 router = APIRouter()
 
@@ -30,3 +31,10 @@ async def health(request: Request, response: Response) -> dict:
     if not healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {"status": "ok" if healthy else "degraded", "checks": checks}
+
+
+@router.get("/config")
+async def config(request: Request) -> dict:
+    """What the web app needs to know about this deployment."""
+    read_only = request.app.state.settings.read_only
+    return {"read_only": read_only, "examples": EXAMPLES if read_only else []}
