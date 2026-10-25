@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { type DocumentItem, listDocuments, uploadDocument } from "@/lib/api";
+import { type DocumentItem, getConfig, listDocuments, uploadDocument } from "@/lib/api";
 
 const ACCEPT = ".pdf,.html,.htm,.md,.markdown,.txt";
 
@@ -18,7 +18,12 @@ export function DocumentsPanel() {
   const [uploading, setUploading] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void getConfig().then((c) => setReadOnly(c.read_only));
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -64,6 +69,12 @@ export function DocumentsPanel() {
     <section className="flex flex-col gap-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-foreground/60">Documents</h2>
 
+      {readOnly ? (
+        <p className="rounded-lg border border-foreground/15 px-4 py-3 text-sm text-foreground/70">
+          Read-only demo over a fixed corpus: 510 commercial contracts (CUAD) and 51 volumes of the
+          Code of Federal Regulations, 52,650 pages in all.
+        </p>
+      ) : (
       <button
         type="button"
         onClick={() => input.current?.click()}
@@ -84,6 +95,7 @@ export function DocumentsPanel() {
         {uploading > 0 ? `Uploading ${uploading}…` : "Drop files or click to upload"}
         <span className="mt-1 block text-xs text-foreground/50">PDF, HTML, Markdown, text</span>
       </button>
+      )}
       <input
         ref={input}
         type="file"

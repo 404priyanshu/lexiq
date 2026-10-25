@@ -51,7 +51,7 @@ eval: ## Retrieval metrics on all 500 golden questions, then the regression gate
 	$(API) uv run python -m app.evals.run --out ../../evals/runs/latest
 	$(API) uv run python -m app.evals.gate ../../evals/runs/latest/summary.json
 
-eval-answers: ## Also generate + judge answers for 100 questions (uses the Anthropic API)
+eval-answers: ## Also generate + judge answers for 100 questions (uses the configured LLM API)
 	$(API) uv run python -m app.evals.run --answers 100 --out ../../evals/runs/latest
 	$(API) uv run python -m app.evals.gate ../../evals/runs/latest/summary.json
 
@@ -64,3 +64,8 @@ corpus-cuad: ## Ingest all 510 CUAD contracts through the worker (needs `make ev
 corpus-cfr: ## Fetch the pinned CFR volumes from govinfo.gov and ingest them through the worker
 	$(API) uv run python -m app.corpus.cfr --year 2025 --titles 12 15 16 17 26 29 31
 	$(API) uv run python -m app.ingest.bulk cfr
+
+demo-dump: ## Data-only dump of the local index for the public demo (infra/demo/restore-index.sh)
+	$(COMPOSE) exec -T postgres \
+		pg_dump -U lexiq -d lexiq -Fc --data-only -t documents -t chunks > data/demo-index.dump
+	@ls -lh data/demo-index.dump

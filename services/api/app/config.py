@@ -82,6 +82,16 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Public demo (docs/DEMO_PLAN.md). Everything is off by default. read_only turns off
+    # uploads and re-ingest and caps answers at top_k passages. The per-client limits are
+    # fixed windows keyed by client IP; daily_answer_budget caps model calls across all
+    # clients per UTC day (cached answers don't count).
+    read_only: bool = False
+    answer_limit_per_minute: int | None = None
+    answer_limit_per_day: int | None = None
+    search_limit_per_minute: int | None = None
+    daily_answer_budget: int | None = None
+
     @model_validator(mode="after")
     def _resolve_provider(self) -> "Settings":
         # Written to __dict__ so resolved values don't count as explicitly set, and

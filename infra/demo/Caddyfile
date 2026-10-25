@@ -1,0 +1,19 @@
+# HTTPS for {$DOMAIN} via Let's Encrypt (Caddy's internal CA when DOMAIN is localhost).
+{$DOMAIN} {
+	encode zstd gzip
+
+	# The API, under /api with the prefix stripped. Uploads are off in the demo, so request
+	# bodies stay small. Answers are server-sent events: flush each one immediately.
+	handle_path /api/* {
+		request_body {
+			max_size 64KB
+		}
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

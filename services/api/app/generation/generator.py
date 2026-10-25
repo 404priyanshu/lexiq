@@ -43,11 +43,13 @@ GenEvent = TextDelta | FallbackNotice | Completion
 
 
 class GenerationError(Exception):
-    """The answer model failed; `retryable` when trying again later may succeed."""
+    """The answer model failed; `retryable` when trying again later may succeed.
+    `public_message` replaces the generic message shown to users when set."""
 
-    def __init__(self, message: str, retryable: bool):
+    def __init__(self, message: str, retryable: bool, public_message: str | None = None):
         super().__init__(message)
         self.retryable = retryable
+        self.public_message = public_message
 
 
 def _api_error(exc: Exception, sdk: ModuleType) -> GenerationError:

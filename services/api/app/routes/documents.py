@@ -19,6 +19,11 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 Session = Annotated[AsyncSession, Depends(get_session)]
 
 
+def require_writable(request: Request) -> None:
+    if request.app.state.settings.read_only:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This deployment is read-only.")
+
+
 class DocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,7 +69,7 @@ async def _enqueue(request: Request, document_id: uuid.UUID) -> None:
     )
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_writable)])
 async def upload_document(
     request: Request,
     response: Response,
@@ -118,7 +123,11 @@ async def get_document(session: Session, document_id: uuid.UUID) -> DocumentOut:
     return await _get_out(session, document_id)
 
 
-@router.post("/{document_id}/reingest", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{document_id}/reingest",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_writable)],
+)
 async def reingest_document(
     request: Request, session: Session, document_id: uuid.UUID
 ) -> DocumentOut:

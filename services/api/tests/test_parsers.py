@@ -82,3 +82,34 @@ def test_running_headers_and_footers_are_stripped():
     parsed = parse(data, "application/pdf")
 
     assert parsed.pages[2] == " ".join(f"Body charlie line {i}." for i in range(8))
+
+
+def _two_column_pdf() -> bytes:
+    """A CFR-like page: full-width header, two columns of two paragraphs, page number."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=612, height=792)
+    page.insert_textbox(pymupdf.Rect(72, 60, 540, 80), "TITLE 16 COMMERCIAL PRACTICES")
+    para = "{} " + "This paragraph carries enough words to look like real regulatory text. " * 3
+    for x0, x1, label in ((72, 296, "LEFT"), (316, 540, "RIGHT")):
+        page.insert_textbox(pymupdf.Rect(x0, 100, x1, 300), para.format(f"{label}-ONE"))
+        page.insert_textbox(pymupdf.Rect(x0, 320, x1, 520), para.format(f"{label}-TWO"))
+    page.insert_textbox(pymupdf.Rect(286, 740, 326, 760), "500")
+    return doc.tobytes()
+
+
+def test_two_column_pages_read_one_column_then_the_other():
+    text = parse(_two_column_pdf(), "application/pdf").pages[0]
+    order = [text.index(m) for m in ("TITLE 16", "LEFT-ONE", "LEFT-TWO", "RIGHT-ONE", "RIGHT-TWO")]
+    assert order == sorted(order)
+    # Sorting by position alone would splice the columns line by line.
+    assert "LEFT-ONE This paragraph carries enough words" in text
+
+
+def test_side_by_side_short_blocks_keep_the_default_order():
+    doc = pymupdf.open()
+    page = doc.new_page(width=612, height=792)
+    page.insert_textbox(pymupdf.Rect(72, 100, 290, 160), "ACME CORP.\nBy: Alice Smith")
+    page.insert_textbox(pymupdf.Rect(320, 100, 540, 160), "GLOBEX LLC\nBy: Bob Jones")
+    flags = pymupdf.TEXTFLAGS_TEXT | pymupdf.TEXT_DEHYPHENATE
+    default = normalize(page.get_text("text", flags=flags, sort=True))
+    assert parse(doc.tobytes(), "application/pdf").pages[0] == default

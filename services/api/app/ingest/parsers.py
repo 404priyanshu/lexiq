@@ -52,10 +52,63 @@ def parse(data: bytes, mime_type: str) -> ParsedDocument:
 def parse_pdf(data: bytes) -> ParsedDocument:
     flags = pymupdf.TEXTFLAGS_TEXT | pymupdf.TEXT_DEHYPHENATE
     with pymupdf.open(stream=data, filetype="pdf") as doc:
-        # sort=True reads blocks top-to-bottom, left-to-right (helps multi-column layouts).
-        raw = [page.get_text("text", flags=flags, sort=True) for page in doc]
+        raw = [_page_text(page, flags) for page in doc]
         title = (doc.metadata or {}).get("title") or None
     return ParsedDocument(title=title, pages=[normalize(p) for p in strip_running_lines(raw)])
+
+
+# Blocks within this share of the page width of the middle still count as one column's.
+_GUTTER_TOLERANCE = 0.02
+# A band is two-column text only with this much on each side; less is a signature block, a
+# key/value header or a table, which the default extraction handles no worse.
+_COLUMN_MIN_BLOCKS = 2
+_COLUMN_MIN_CHARS = 300
+
+
+def _page_text(page: pymupdf.Page, flags: int) -> str:
+    """Page text in reading order, column by column on two-column pages.
+
+    Sorting by position (PyMuPDF's sort=True) interleaves the columns of a two-column page,
+    the CFR's layout, splicing unrelated sentences together. Here, blocks that span the middle
+    of the page (headers, page numbers, full-width paragraphs) cut the page into bands, and a
+    band with substantial text on both sides of the middle is read left column first, then
+    right. Pages without such a band keep the default extraction unchanged.
+    """
+    blocks = [b for b in page.get_text("blocks", flags=flags) if b[4].strip()]
+    mid = page.rect.width / 2
+    tol = page.rect.width * _GUTTER_TOLERANCE
+
+    def side(b) -> str:
+        if b[2] <= mid + tol:
+            return "left"
+        if b[0] >= mid - tol:
+            return "right"
+        return "full"
+
+    bands: list[list] = [[]]
+    for b in sorted(blocks, key=lambda b: (b[1], b[0])):
+        if side(b) == "full":
+            bands.append([b])
+            bands.append([])
+        else:
+            bands[-1].append(b)
+
+    def two_column(band: list) -> bool:
+        return all(
+            len(col) >= _COLUMN_MIN_BLOCKS and sum(len(b[4]) for b in col) >= _COLUMN_MIN_CHARS
+            for col in ([b for b in band if side(b) == s] for s in ("left", "right"))
+        )
+
+    if not any(two_column(band) for band in bands):
+        return page.get_text("text", flags=flags, sort=True)
+
+    ordered = []
+    for band in bands:
+        key = (lambda b: (side(b) == "right", b[1], b[0])) if two_column(band) else None
+        ordered.extend(sorted(band, key=key or (lambda b: (b[1], b[0]))))
+    # Single newlines: a paragraph often runs on from the foot of the left column to the top
+    # of the right, and normalize() rejoins those lines (and hyphenated words).
+    return "\n".join(b[4].rstrip("\n") for b in ordered)
 
 
 def strip_running_lines(pages: list[str], edge: int = 3, min_share: float = 0.3) -> list[str]:

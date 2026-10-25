@@ -18,6 +18,20 @@ export async function getHealth(): Promise<Health | null> {
   }
 }
 
+export type AppConfig = { read_only: boolean; examples: string[] };
+
+const DEFAULT_CONFIG: AppConfig = { read_only: false, examples: [] };
+
+/** Deployment settings from the API (the public demo is read-only and shows examples). */
+export async function getConfig(): Promise<AppConfig> {
+  try {
+    const res = await fetch(`${PUBLIC_API_URL}/config`, { cache: "no-store" });
+    return res.ok ? ((await res.json()) as AppConfig) : DEFAULT_CONFIG;
+  } catch {
+    return DEFAULT_CONFIG;
+  }
+}
+
 export type DocumentStatus = "pending" | "processing" | "ready" | "failed";
 
 export type DocumentItem = {

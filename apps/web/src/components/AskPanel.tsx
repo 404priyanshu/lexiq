@@ -1,8 +1,8 @@
 "use client";
 
-import { type FormEvent, Fragment, useRef, useState } from "react";
+import { type FormEvent, Fragment, useEffect, useRef, useState } from "react";
 
-import { type AnswerDone, type Source, streamAnswer } from "@/lib/api";
+import { type AnswerDone, type Source, getConfig, streamAnswer } from "@/lib/api";
 
 type Phase = "idle" | "searching" | "writing" | "done" | "error";
 
@@ -21,11 +21,16 @@ export function AskPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<number | null>(null);
+  const [examples, setExamples] = useState<string[]>([]);
   const abort = useRef<AbortController | null>(null);
 
-  async function ask(e?: FormEvent) {
+  useEffect(() => {
+    void getConfig().then((c) => setExamples(c.examples));
+  }, []);
+
+  async function ask(e?: FormEvent, text?: string) {
     e?.preventDefault();
-    const q = question.trim();
+    const q = (text ?? question).trim();
     if (!q) return;
 
     abort.current?.abort();
@@ -102,6 +107,27 @@ export function AskPanel() {
             {busy ? "…" : "Ask"}
           </button>
         </div>
+        {examples.length > 0 && phase === "idle" && (
+          <div className="flex flex-col gap-1.5 pt-1">
+            <p className="text-xs text-foreground/50">Try one of these:</p>
+            <ul className="flex flex-wrap gap-1.5">
+              {examples.map((ex) => (
+                <li key={ex}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuestion(ex);
+                      void ask(undefined, ex);
+                    }}
+                    className="rounded-full border border-foreground/15 px-3 py-1 text-left text-xs text-foreground/75 hover:bg-foreground/5"
+                  >
+                    {ex}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </form>
 
       {phase !== "idle" && (
