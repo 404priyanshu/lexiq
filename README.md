@@ -174,8 +174,39 @@ routing accuracy.
 Index size at 52k pages: 341 MB of chunk rows, 237 MB HNSW index, 84 MB BM25 index.
 
 Anthropic prompt caching isn't used: the system prompt is below the minimum cacheable length
-and the sources differ per question. End-to-end answer latency, $/query and the LLM-judged
-answer metrics need an LLM API key and haven't been measured yet.
+and the sources differ per question.
+
+### Answers
+
+End to end with `gpt-4.1-mini` writing the answer: 100 golden questions run one at a time
+against the 52,650-page index, contract-scoped (`make bench` with `--answers`).
+
+| Stage | p50 | p95 |
+|---|---|---|
+| Retrieval | 216 ms | 227 ms |
+| First answer token | 902 ms | 1,118 ms |
+| Complete answer | 1,404 ms | 2,366 ms |
+
+**$0.0016 per query** at OpenAI's standard pricing (mean 3,652 input and 98 output tokens);
+retrieval and reranking run locally and add nothing.
+
+Judged on the first 100 golden questions (81 answerable, 19 unanswerable), with
+`gpt-4.1-mini` also as the judge:
+
+| Metric | Value |
+|---|---|
+| Faithfulness: every claim supported by the given sources | 0.974 |
+| Answer correctness: agrees with CUAD's lawyer-marked evidence | 0.852 |
+| Citations valid (no out-of-range `[n]`) | 1.000 |
+| Sentences carrying a citation | 0.50 |
+| Unanswerable questions correctly declined | 0.684 (13 of 19) |
+| Declines that were right to decline | 0.565 (13 of 23) |
+
+A model grading its own answers can be lenient, so faithfulness is best read as an upper
+bound. Abstaining is the weak spot: the model declined 10 answerable questions and answered 6
+that CUAD marks as having no such clause. The run cost $0.29 ($0.16 answers, $0.13 judging).
+These are the answer baselines in `evals/baseline.json`; CI gates on them only when a key is
+configured, and doesn't have one.
 
 ## Data
 

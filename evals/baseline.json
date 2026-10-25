@@ -22,20 +22,25 @@
       "direction": "lower"
     },
     "answers.faithfulness": {
-      "value": null,
+      "value": 0.9744,
       "tolerance": 0.03
     },
     "answers.answer_correctness": {
-      "value": null,
+      "value": 0.8519,
       "tolerance": 0.05
     },
     "answers.abstain_recall": {
-      "value": null,
+      "value": 0.6842,
       "tolerance": 0.1
     },
     "answers.citation_valid_rate": {
-      "value": null,
+      "value": 1.0,
       "tolerance": 0.02
     }
+  },
+  "answers_measured_with": {
+    "answer": "gpt-4.1-mini",
+    "judge": "gpt-4.1-mini",
+    "questions": 100
   }
 }
