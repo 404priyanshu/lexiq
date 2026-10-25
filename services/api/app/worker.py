@@ -46,8 +46,7 @@ class WorkerSettings:
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
-    # Embedding is CPU-bound and already multi-threaded inside ONNX Runtime.
-    max_jobs = 2
+    max_jobs = get_settings().worker_max_jobs  # see Settings.worker_max_jobs
     job_timeout = 1800
     # Status lives on the documents row. Not keeping arq results also frees the stable job id
     # as soon as a job finishes, so a document can be re-ingested right away.

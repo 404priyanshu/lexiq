@@ -127,14 +127,34 @@ jobs:
           unzip -q -o data/cuad/CUAD_v1.zip -d data/cuad/extracted
       - run: uv run alembic upgrade head
       # Ingesting 98 contracts takes ~15 min on a hosted runner, so the resulting rows are
-      # cached. The key covers everything that can change them: corpus, parsing/chunking,
-      # embedding model and runtime, and the schema.
+      # cached. The key covers exactly what determines them: the corpus, the parse/chunk/store
+      # code, the embedder and its runtime, the schema, library versions (uv.lock), and the
+      # chunking settings. Other code (loaders, retrieval, API) can change without a re-ingest.
+      - name: Chunking settings for the index key
+        id: chunking
+        run: >-
+          uv run python -c "from app.config import get_settings as g; s = g();
+          print(f'value={s.chunk_target_tokens}-{s.chunk_max_tokens}-{s.chunk_overlap_tokens}')"
+          >> "$GITHUB_OUTPUT"
       - name: Restore eval index
         id: index
         uses: actions/cache/restore@v4
         with:
           path: data/eval-index.dump
-          key: eval-index-${{ hashFiles('evals/corpus.json', 'services/api/app/ingest/**', 'services/api/app/ml/**', 'services/api/app/models.py', 'services/api/migrations/**') }}
+          key: >-
+            eval-index-${{ steps.chunking.outputs.value }}-${{ hashFiles(
+            'evals/corpus.json',
+            'services/api/app/ingest/parsers.py',
+            'services/api/app/ingest/chunker.py',
+            'services/api/app/ingest/pipeline.py',
+            'services/api/app/ingest/store.py',
+            'services/api/app/evals/corpus.py',
+            'services/api/app/ml/embedder.py',
+            'services/api/app/ml/runtime.py',
+            'services/api/app/ml/registry.py',
+            'services/api/app/models.py',
+            'services/api/migrations/**',
+            'services/api/uv.lock') }}
       - name: Load cached eval index
         if: steps.index.outputs.cache-hit == 'true'
         working-directory: .

@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 API := cd services/api &&
 WEB := cd apps/web &&
 
-.PHONY: setup up down migrate models api worker web test lint eval-corpus eval eval-answers bench
+.PHONY: setup up down migrate models api worker web test lint eval-corpus eval eval-answers bench corpus-cuad corpus-cfr
 
 setup: ## First-time setup: env file, deps, stack, schema
 	test -f .env || cp .env.example .env
@@ -57,3 +57,10 @@ eval-answers: ## Also generate + judge answers for 100 questions (uses the Anthr
 
 bench: ## Per-request retrieval latency over 100 golden questions (cold, then warm cache)
 	$(API) uv run python -m app.bench.run --questions 100 --cache --repeat 2
+
+corpus-cuad: ## Ingest all 510 CUAD contracts through the worker (needs `make eval-corpus` once)
+	$(API) uv run python -m app.ingest.bulk cuad
+
+corpus-cfr: ## Fetch the pinned CFR volumes from govinfo.gov and ingest them through the worker
+	$(API) uv run python -m app.corpus.cfr --year 2025 --titles 12 15 16 17 26 29 31
+	$(API) uv run python -m app.ingest.bulk cfr
