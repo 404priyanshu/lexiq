@@ -8,9 +8,9 @@ evidence is insufficient. Every retrieval and prompt change is scored against a
 | | |
 |---|---|
 | Corpus | **52,650 pages** (561 documents, 124,353 chunks): all 510 CUAD contracts + 51 volumes of federal regulations |
-| Retrieval quality | recall@5 **0.762**, recall@1 0.459, MRR@10 0.586 on 425 answerable golden questions |
+| Retrieval quality | recall@5 **0.762** within a contract; **0.729** across all 52k pages with two-stage retrieval (up from 0.338) ([details](#whole-corpus-quality)) |
 | Retrieval latency | **179 / 188 ms** p50 / p95 per request at 52k pages; <1 ms on a cache hit |
-| CI | lint, 72 tests, web build, and a golden-set gate that fails on regression |
+| CI | lint, 82 tests, web build, and a golden-set gate that fails on regression |
 
 See [docs/PLAN.md](docs/PLAN.md) for the build plan and [evals/](evals/README.md) for the eval
 methodology.
@@ -27,6 +27,7 @@ flowchart LR
   subgraph Answer
     Qn[Question] --> R{Redis cache}
     R -- miss --> B[BM25] & D[Embed + HNSW]
+    X -. names a document .-> RT[Stage 2: search that document with the names removed] --> G
     B & D --> F[RRF fusion] --> X[int8 cross-encoder rerank]
     X -->|best passage irrelevant| A1[Abstain]
     X --> G[Claude: numbered sources, cite every claim] -->|SSE| UI[Web UI with citation chips]
@@ -41,6 +42,10 @@ flowchart LR
   Fusion, and reranks the top 10 with a local int8 cross-encoder: no per-query API cost.
 - **Generation** gives Claude numbered passages and requires a `[n]` citation on every factual
   sentence; citations are validated afterwards. Answers stream over server-sent events.
+- **Two-stage retrieval** handles corpus-wide questions that name a document ("In the Supply
+  Agreement between Acme and Globex, ..."): stage 1 finds the document, stage 2 searches it
+  with the identifying words removed, so the preamble that repeats the names doesn't crowd out
+  the clause. Questions that name no document stay corpus-wide.
 - **Abstaining** happens before the model when nothing relevant is retrieved, and when the
   model reports the passages don't answer the question.
 - **Caching** keys reranked retrievals and finished answers by a corpus version that every
@@ -111,7 +116,8 @@ Retrieval latency per request (100 golden questions run one at a time on an Appl
 | Rerank 10 candidates | 98 contracts | 186 ms | 198 ms | 0.762 | 0.457 |
 | + int8 reranker | 98 contracts | 159 ms | 169 ms | 0.762 | 0.459 |
 | **Same, contract-scoped** | **52,650 pages** | **179 ms** | **188 ms** | **0.762** | **0.459** |
-| Same, whole corpus | 52,650 pages | 164 ms | 172 ms | — | — |
+| Same, whole corpus, single stage | 52,650 pages | 173 ms | 180 ms | 0.338 | 0.045 |
+| **Whole corpus, two-stage (default)** | **52,650 pages** | **349 ms** | **363 ms** | **0.729** | **0.433** |
 | Repeat question (Redis cache hit) | either | <1 ms | 1 ms | — | — |
 
 What the sweeps showed:
@@ -127,6 +133,41 @@ What the sweeps showed:
 - At the start of evals, the retrieval-stage abstain threshold refused 33% of answerable
   questions; it's now a floor for off-topic queries (1.4% false refusals) and the model's
   insufficient-evidence path does the real abstaining.
+
+### Whole-corpus quality
+
+The golden questions say "this agreement", so they're evaluated within their contract. To
+measure search across all 52k pages, `evals/golden_corpus.jsonl` rewrites the 420 answerable
+questions whose contract has an identifiable party to name it, from CUAD's own annotations
+("In the Master Supply Agreement between Reynolds Consumer Products LLC and Pactiv LLC, ...").
+A hit only counts if the clause comes from the named contract.
+
+| | Within the contract | Whole corpus |
+|---|---|---|
+| Right contract, top 1 / top 5 | — | **0.964 / 1.000** |
+| Right clause recall@1 | 0.459 | 0.045 |
+| Right clause recall@5 | 0.762 | 0.338 |
+| Right clause recall@8 | 0.831 | 0.431 |
+
+Single-stage retrieval found the contract almost every time but returned the wrong passage:
+on 35 of 49 sampled misses the top result was the contract's preamble, the one chunk that
+repeats the party names the question uses. Two-stage retrieval fixes this. Stage 1 picks the
+document (the top reranked chunk's document); stage 2 searches inside it with the identifying
+words removed: capitalized query words that also appear in the document's opening chunks.
+
+| Whole corpus | Single stage | Two-stage | Ceiling (original unnamed question in stage 2) |
+|---|---|---|---|
+| Clause recall@1 | 0.045 | **0.433** | — |
+| Clause recall@5 | 0.338 | **0.729** | 0.731 |
+| MRR@10 | 0.159 | **0.556** | — |
+| Routed / to the named contract | — | 100% / 96.4% | — |
+
+The number of words removed is also the gate: a question that names nothing in the document
+isn't narrowed to it. Asked across the corpus, the 500 unnamed golden questions were routed
+0% of the time, and contract-scoped results are unchanged. The costs: a second retrieval pass
+(whole-corpus p50 173 → 349 ms), and when stage 1 picks the wrong contract (3.6%) the right one
+isn't in the results at all. Routing on fusion scores alone would save ~110 ms for ~3 points of
+routing accuracy.
 
 Index size at 52k pages: 341 MB of chunk rows, 237 MB HNSW index, 84 MB BM25 index.
 

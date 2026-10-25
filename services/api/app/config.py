@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     # int8-quantized cross-encoder: same recall on the golden set, faster on CPU.
     reranker_int8: bool = True
     top_k: int = 8
+    # Two-stage retrieval for corpus-wide questions that name a document ("In the Supply
+    # Agreement between Acme and Globex, ..."): route to that document, then search it with the
+    # names removed. Routes only when at least this many capitalized query words also appear
+    # in the document's opening chunks, so questions that name no document stay corpus-wide.
+    route_to_document: bool = True
+    route_min_identity_words: int = 2
     # Abstain before generation when the best reranked passage's sigmoid(logit) is below this.
     # Only a floor for clearly off-topic questions: on the CUAD golden set the reranker's score
     # barely separates answerable from unanswerable questions (at 0.1 it refused 33% of

@@ -58,8 +58,14 @@ async def enqueue(files: list[tuple[Path, str, str | None]]) -> list[uuid.UUID]:
                 queued += 1
     finally:
         await redis.aclose()
-    print(f"{len(ids)} documents registered, {queued} queued for ingestion", flush=True)
-    return ids
+    # Files with identical bytes map to one document; waiting on duplicate ids would never
+    # finish, since only one document exists for them.
+    unique = list(dict.fromkeys(ids))
+    print(
+        f"{len(files)} files -> {len(unique)} documents, {queued} queued for ingestion",
+        flush=True,
+    )
+    return unique
 
 
 async def wait(ids: list[uuid.UUID], interval: float = 30, max_wait_s: float = 4 * 3600) -> None:

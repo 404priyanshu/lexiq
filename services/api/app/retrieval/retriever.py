@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.config import Settings
 from app.ml.embedder import Embedder
 from app.ml.reranker import Reranker, sigmoid
+from app.retrieval.routing import focus_query
 from app.retrieval.search import bm25_search, dense_search, rrf
 
 if TYPE_CHECKING:
@@ -44,6 +45,9 @@ class RetrievalResult:
     candidates: int
     timings_ms: dict[str, float] = field(default_factory=dict)
     cached: bool = False
+    # Set when two-stage retrieval narrowed a corpus-wide question to the document it names.
+    routed_document_id: uuid.UUID | None = None
+    focused_query: str | None = None
 
 
 class _Timer:
@@ -57,6 +61,13 @@ class _Timer:
     def __exit__(self, *exc):
         self.timings[self.name] = round((time.perf_counter() - self.start) * 1000, 1)
 
+
+_PREAMBLE = text(
+    """
+    select string_agg(content, ' ' order by ordinal) from chunks
+    where document_id = :document_id and ordinal <= 1
+    """
+)
 
 _LOAD_CHUNKS = text(
     """
@@ -97,15 +108,49 @@ class Retriever:
     ) -> RetrievalResult:
         top_k = top_k or self.s.top_k
         if self.cache is None:
-            return await self._retrieve(query, top_k, document_ids)
+            return await self._search(query, top_k, document_ids)
 
         started = time.perf_counter()
         if hit := await self.cache.get_retrieval(query, top_k, document_ids):
             hit.timings_ms = {"cache": _ms_since(started), "total": _ms_since(started)}
             return hit
-        result = await self._retrieve(query, top_k, document_ids)
+        result = await self._search(query, top_k, document_ids)
         await self.cache.set_retrieval(query, top_k, document_ids, result)
         return result
+
+    async def _search(
+        self, query: str, top_k: int, document_ids: Sequence[uuid.UUID] | None
+    ) -> RetrievalResult:
+        """Hybrid retrieval, with two-stage routing for corpus-wide questions that name a
+        document: stage 1 finds the document, stage 2 searches inside it for the clause."""
+        if document_ids or not self.s.route_to_document:
+            return await self._retrieve(query, top_k, document_ids)
+
+        started = time.perf_counter()
+        first = await self._retrieve(query, max(top_k, self.s.rerank_candidates), None)
+        if first.abstained or not first.chunks:
+            return first
+        target = first.chunks[0].document_id
+        focused, removed = focus_query(query, await self._preamble(target))
+        if removed < self.s.route_min_identity_words:
+            # The question doesn't name this document; keep the corpus-wide results.
+            first.chunks = first.chunks[:top_k]
+            return first
+
+        second = await self._retrieve(focused, top_k, [target])
+        second.query = query
+        second.routed_document_id = target
+        second.focused_query = focused
+        stage2 = {k: v for k, v in second.timings_ms.items() if k != "total"}
+        second.timings_ms = {"route": first.timings_ms["total"], **stage2}
+        second.timings_ms["total"] = _ms_since(started)
+        return second
+
+    async def _preamble(self, document_id: uuid.UUID) -> str:
+        """The document's opening chunks, where its title and parties are named."""
+        async with self.engine.connect() as conn:
+            text_ = await conn.scalar(_PREAMBLE, {"document_id": document_id})
+        return text_ or ""
 
     async def _retrieve(
         self, query: str, top_k: int, document_ids: Sequence[uuid.UUID] | None

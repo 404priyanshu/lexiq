@@ -42,7 +42,8 @@ class QueryCache:
         self.retrieval_config = _fingerprint(
             settings.lexical_k, settings.dense_k, settings.hnsw_ef_search, settings.rrf_k,
             settings.rerank_candidates, settings.rerank_max_tokens, settings.reranker_int8,
-            settings.abstain_min_relevance, EMBEDDER.revision, RERANKER.revision,
+            settings.abstain_min_relevance, settings.route_to_document,
+            settings.route_min_identity_words, EMBEDDER.revision, RERANKER.revision,
         )  # fmt: skip
         self.answer_config = _fingerprint(
             self.retrieval_config, settings.llm_model, settings.llm_effort, SYSTEM_PROMPT
@@ -69,6 +70,8 @@ class QueryCache:
             RetrievedChunk(**(c | {"document_id": uuid.UUID(c["document_id"])}))
             for c in data.pop("chunks")
         ]
+        if data.get("routed_document_id"):
+            data["routed_document_id"] = uuid.UUID(data["routed_document_id"])
         return RetrievalResult(**data, chunks=chunks)
 
     async def set_retrieval(

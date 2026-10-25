@@ -14,6 +14,7 @@ import asyncio
 import json
 import statistics
 import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from app.config import REPO_ROOT, Settings, get_settings, settings_with
 from app.db import engine
 from app.evals.corpus import document_ids_by_sha, load_corpus
 from app.evals.golden import GOLDEN_PATH
+from app.evals.golden_corpus import CORPUS_GOLDEN_PATH
 from app.evals.judge import Judge
 from app.evals.matching import first_hit
 from app.generation.generator import ClaudeGenerator
@@ -54,9 +56,11 @@ class _Replay:
         )  # fmt: skip
 
 
-def _rank_by(result: RetrievalResult, key) -> list[str]:
+def _rank_by(result: RetrievalResult, key, target: uuid.UUID) -> list[str]:
+    """Chunk texts in the order `key` ranks them. Chunks from any other document are blanked,
+    so evidence only counts when it comes from the contract the question is about."""
     ranked = [c for c in result.chunks if key(c) is not None]
-    return [c.content for c in sorted(ranked, key=key)]
+    return [c.content if c.document_id == target else "" for c in sorted(ranked, key=key)]
 
 
 def _recall(ranks: list[int | None], k: int) -> float | None:
@@ -68,10 +72,19 @@ def _pct(values: list[float], q: float) -> float:
 
 
 async def evaluate(
-    answer_limit: int, concurrency: int, limit: int | None = None, settings: Settings | None = None
+    answer_limit: int,
+    concurrency: int,
+    limit: int | None = None,
+    settings: Settings | None = None,
+    scope: str = "document",
 ) -> tuple[list[dict], dict]:
+    """scope="document": golden questions, retrieval restricted to their contract.
+    scope="corpus": contract-named questions, retrieval over every document.
+    scope="unnamed": golden questions over every document; they name no contract, so this
+    measures how often two-stage retrieval wrongly narrows a question to one document."""
     s = settings or get_settings()
-    golden = [json.loads(line) for line in GOLDEN_PATH.read_text().splitlines()][:limit]
+    path = CORPUS_GOLDEN_PATH if scope == "corpus" else GOLDEN_PATH
+    golden = [json.loads(line) for line in path.read_text().splitlines()][:limit]
     docs = await document_ids_by_sha()
     doc_for = {}
     for d in load_corpus():
@@ -99,8 +112,11 @@ async def evaluate(
         nonlocal done_count
         async with sem:
             # Ask for every reranked candidate so recall@k can be read at any k.
+            target = doc_for[g["contract"]]
             res = await retriever.retrieve(
-                g["question"], top_k=s.rerank_candidates, document_ids=[doc_for[g["contract"]]]
+                g["question"],
+                top_k=s.rerank_candidates,
+                document_ids=[target] if scope == "document" else None,
             )
         done_count += 1
         if res.timings_ms.get("total", 0) > 3000:
@@ -117,12 +133,20 @@ async def evaluate(
             "retrieval_ms": res.timings_ms.get("total"),
         }
         if g["answerable"]:
+            reranked = [c.content if c.document_id == target else "" for c in res.chunks]
             row["rank"] = {
-                "rerank": first_hit(g["evidence"], [c.content for c in res.chunks]),
-                "rrf": first_hit(g["evidence"], _rank_by(res, lambda c: -c.rrf_score)),
-                "bm25": first_hit(g["evidence"], _rank_by(res, lambda c: c.bm25_rank)),
-                "dense": first_hit(g["evidence"], _rank_by(res, lambda c: c.dense_rank)),
+                "rerank": first_hit(g["evidence"], reranked),
+                "rrf": first_hit(g["evidence"], _rank_by(res, lambda c: -c.rrf_score, target)),
+                "bm25": first_hit(g["evidence"], _rank_by(res, lambda c: c.bm25_rank, target)),
+                "dense": first_hit(g["evidence"], _rank_by(res, lambda c: c.dense_rank, target)),
             }
+            if scope != "document":
+                row["routed"] = res.routed_document_id is not None
+                row["routed_to_target"] = res.routed_document_id == target
+                # Did retrieval find the right contract at all, whatever the clause?
+                row["doc_rank"] = next(
+                    (i for i, c in enumerate(res.chunks, start=1) if c.document_id == target), None
+                )
         if generator and i < answer_limit:
             row["generation"] = await generate_and_judge(g, res)
         return row
@@ -187,6 +211,14 @@ def summarize(rows: list[dict], abstain_threshold: float) -> dict:
             "unanswerable_abstain_rate": _rate(
                 unanswerable, lambda r: r["top_relevance"] < threshold
             ),
+        }
+
+    if any("doc_rank" in r for r in answerable):
+        doc_ranks = [r.get("doc_rank") for r in answerable]
+        retrieval["document_recall"] = {f"@{k}": _recall(doc_ranks, k) for k in RECALL_KS}
+        retrieval["routing"] = {
+            "routed_rate": _rate(answerable, lambda r: r["routed"]),
+            "routed_to_target_rate": _rate(answerable, lambda r: r["routed_to_target"]),
         }
 
     summary = {
@@ -269,6 +301,12 @@ def print_summary(summary: dict) -> None:
         f"abstain     @{a['threshold']}: false-abstain {_f(a['false_abstain_rate'])}, "
         f"unanswerable caught {_f(a['unanswerable_abstain_rate'])}"
     )
+    if "document_recall" in r:
+        dr = r["document_recall"]
+        print("right doc   " + "  ".join(f"recall{k} {_f(v)}" for k, v in dr.items()))
+        rt = r["routing"]
+        print(f"routing     routed {_f(rt['routed_rate'])}  to the named contract "
+              f"{_f(rt['routed_to_target_rate'])}")  # fmt: skip
     if "answers" in summary:
         print("answers     " + json.dumps(summary["answers"]))
 
@@ -278,6 +316,12 @@ def main() -> None:
     parser.add_argument("--answers", type=int, default=0, metavar="N")
     parser.add_argument("--concurrency", type=int, default=2)
     parser.add_argument("--limit", type=int, default=None, help="only the first N questions")
+    parser.add_argument(
+        "--scope", choices=["document", "corpus", "unnamed"], default="document",
+        help="document: golden set within each contract; corpus: contract-named questions "
+        "over every document (evals/golden_corpus.jsonl); unnamed: golden set over every "
+        "document, to measure false routing",
+    )  # fmt: skip
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument(
         "--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE",
@@ -288,11 +332,12 @@ def main() -> None:
 
     async def run():
         try:
-            return await evaluate(args.answers, args.concurrency, args.limit, settings)
+            return await evaluate(args.answers, args.concurrency, args.limit, settings, args.scope)
         finally:
             await engine.dispose()
 
     rows, summary = asyncio.run(run())
+    summary["scope"] = args.scope
     summary["overrides"] = args.overrides
     out = args.out or RUNS_DIR / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out.mkdir(parents=True, exist_ok=True)

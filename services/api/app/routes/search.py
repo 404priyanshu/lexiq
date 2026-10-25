@@ -42,6 +42,9 @@ class SearchResponse(BaseModel):
     candidates: int
     timings_ms: dict[str, float]
     chunks: list[SearchHit]
+    cached: bool = False
+    routed_document_id: uuid.UUID | None = None
+    focused_query: str | None = None
 
 
 @router.post("/search")
