@@ -41,7 +41,9 @@ only real legal entities (role labels like "Seller" or "Party A" and defined ter
 "Company" are dropped); 5 questions are skipped because their contract names none. A hit only
 counts when the evidence chunk comes from the named contract, since boilerplate clauses are
 near-identical across contracts. Run it with `--scope corpus`; it also reports how often the
-right contract appears at all.
+right contract appears at all and how often two-stage retrieval routed to it. `--scope unnamed`
+asks the original golden questions across the corpus to check that questions naming no
+contract are never routed to one.
 
 ```bash
 uv run python -m app.evals.golden_corpus --cuad ../../data/cuad/extracted/CUAD_v1  # rebuild

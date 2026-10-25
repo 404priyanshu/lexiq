@@ -25,6 +25,7 @@ from app.config import REPO_ROOT, settings_with
 from app.db import engine
 from app.evals.corpus import document_ids_by_sha, load_corpus
 from app.evals.golden import GOLDEN_PATH
+from app.evals.golden_corpus import CORPUS_GOLDEN_PATH
 from app.generation.generator import ClaudeGenerator
 from app.generation.service import answer_events
 from app.retrieval.retriever import Retriever
@@ -57,7 +58,9 @@ def pcts(values: list[float]) -> dict | None:
 
 
 async def bench(args, settings, redis: Redis | None) -> dict:
-    golden = [json.loads(line) for line in GOLDEN_PATH.read_text().splitlines()]
+    # Corpus-wide runs use the contract-named questions, so routing behaves as for a real user.
+    path = CORPUS_GOLDEN_PATH if args.scope == "corpus" else GOLDEN_PATH
+    golden = [json.loads(line) for line in path.read_text().splitlines()]
     questions = golden[: args.questions]
     docs = await document_ids_by_sha()
     doc_for = {d["contract"]: docs[d["sha256"]][0] for d in load_corpus() if d["sha256"] in docs}

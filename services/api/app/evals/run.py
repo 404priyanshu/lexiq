@@ -79,9 +79,11 @@ async def evaluate(
     scope: str = "document",
 ) -> tuple[list[dict], dict]:
     """scope="document": golden questions, retrieval restricted to their contract.
-    scope="corpus": contract-named questions, retrieval over every document."""
+    scope="corpus": contract-named questions, retrieval over every document.
+    scope="unnamed": golden questions over every document; they name no contract, so this
+    measures how often two-stage retrieval wrongly narrows a question to one document."""
     s = settings or get_settings()
-    path = GOLDEN_PATH if scope == "document" else CORPUS_GOLDEN_PATH
+    path = CORPUS_GOLDEN_PATH if scope == "corpus" else GOLDEN_PATH
     golden = [json.loads(line) for line in path.read_text().splitlines()][:limit]
     docs = await document_ids_by_sha()
     doc_for = {}
@@ -138,7 +140,9 @@ async def evaluate(
                 "bm25": first_hit(g["evidence"], _rank_by(res, lambda c: c.bm25_rank, target)),
                 "dense": first_hit(g["evidence"], _rank_by(res, lambda c: c.dense_rank, target)),
             }
-            if scope == "corpus":
+            if scope != "document":
+                row["routed"] = res.routed_document_id is not None
+                row["routed_to_target"] = res.routed_document_id == target
                 # Did retrieval find the right contract at all, whatever the clause?
                 row["doc_rank"] = next(
                     (i for i, c in enumerate(res.chunks, start=1) if c.document_id == target), None
@@ -212,6 +216,10 @@ def summarize(rows: list[dict], abstain_threshold: float) -> dict:
     if any("doc_rank" in r for r in answerable):
         doc_ranks = [r.get("doc_rank") for r in answerable]
         retrieval["document_recall"] = {f"@{k}": _recall(doc_ranks, k) for k in RECALL_KS}
+        retrieval["routing"] = {
+            "routed_rate": _rate(answerable, lambda r: r["routed"]),
+            "routed_to_target_rate": _rate(answerable, lambda r: r["routed_to_target"]),
+        }
 
     summary = {
         "questions": len(rows),
@@ -296,6 +304,9 @@ def print_summary(summary: dict) -> None:
     if "document_recall" in r:
         dr = r["document_recall"]
         print("right doc   " + "  ".join(f"recall{k} {_f(v)}" for k, v in dr.items()))
+        rt = r["routing"]
+        print(f"routing     routed {_f(rt['routed_rate'])}  to the named contract "
+              f"{_f(rt['routed_to_target_rate'])}")  # fmt: skip
     if "answers" in summary:
         print("answers     " + json.dumps(summary["answers"]))
 
@@ -306,9 +317,10 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=2)
     parser.add_argument("--limit", type=int, default=None, help="only the first N questions")
     parser.add_argument(
-        "--scope", choices=["document", "corpus"], default="document",
+        "--scope", choices=["document", "corpus", "unnamed"], default="document",
         help="document: golden set within each contract; corpus: contract-named questions "
-        "over every document (evals/golden_corpus.jsonl)",
+        "over every document (evals/golden_corpus.jsonl); unnamed: golden set over every "
+        "document, to measure false routing",
     )  # fmt: skip
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument(
