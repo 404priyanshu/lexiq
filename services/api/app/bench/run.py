@@ -1,6 +1,6 @@
 """Latency and cost benchmark: questions run one at a time, as a user's request would.
 
-Retrieval stages are always measured. With --answers (needs ANTHROPIC_API_KEY) each question
+Retrieval stages are always measured. With --answers (needs an LLM API key) each question
 also goes through generation, adding time to first token, total answer time and $/query from
 the API's reported token usage. --repeat 2 runs the same questions again to measure warm
 caches. Results go to bench/results/<timestamp>.json.
@@ -17,7 +17,6 @@ import json
 import statistics
 from datetime import UTC, datetime
 
-from anthropic import AsyncAnthropic
 from redis.asyncio import Redis
 
 from app.cache import CORPUS_VERSION_KEY, QueryCache
@@ -26,26 +25,36 @@ from app.db import engine
 from app.evals.corpus import document_ids_by_sha, load_corpus
 from app.evals.golden import GOLDEN_PATH
 from app.evals.golden_corpus import CORPUS_GOLDEN_PATH
-from app.generation.generator import ClaudeGenerator
+from app.generation.generator import make_generator
 from app.generation.service import answer_events
 from app.retrieval.retriever import Retriever
 
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 WARMUP = 3
 
-# USD per million tokens (input, output), from Anthropic's published pricing.
+# USD per million tokens (input, output), standard tier, from Anthropic's and OpenAI's
+# published pricing (checked 2026-10-25). Keys are model-name prefixes; the API reports dated
+# names such as gpt-4.1-mini-2025-04-14.
 PRICES = {
     "claude-opus-5-5": (4.00, 20.00),
     "claude-sonnet-5-5": (2.00, 10.00),
     "claude-haiku-5-5": (0.10, 0.50),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1-nano": (0.10, 0.40),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-5-mini": (0.25, 2.00),
+    "gpt-5-nano": (0.05, 0.40),
+    "gpt-6-luna": (0.10, 0.50),
 }
 
 
 def cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
-    for prefix, (inp, out) in PRICES.items():
-        if model.startswith(prefix):
-            return (input_tokens * inp + output_tokens * out) / 1_000_000
-    return None
+    # Longest prefix wins, so gpt-4.1-mini never matches a shorter gpt-4.1 entry.
+    matches = [p for p in PRICES if model.startswith(p)]
+    if not matches:
+        return None
+    inp, out = PRICES[max(matches, key=len)]
+    return (input_tokens * inp + output_tokens * out) / 1_000_000
 
 
 def pcts(values: list[float]) -> dict | None:
@@ -78,10 +87,9 @@ async def bench(args, settings, redis: Redis | None) -> dict:
     retriever = Retriever.from_settings(engine, settings, cache)
     generator = None
     if args.answers:
-        key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else ""
-        if not key:
-            raise SystemExit("--answers needs ANTHROPIC_API_KEY")
-        generator = ClaudeGenerator(AsyncAnthropic(api_key=key), settings)
+        generator = make_generator(settings)
+        if generator is None:
+            raise SystemExit("--answers needs ANTHROPIC_API_KEY or OPENAI_API_KEY")
 
     def scope(g: dict):
         return [doc_for[g["contract"]]] if args.scope == "document" else None

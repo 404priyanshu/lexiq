@@ -23,7 +23,10 @@ async def answer(request: Request, body: SearchRequest) -> StreamingResponse:
     if retriever is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "retrieval models not loaded")
     if generator is None:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "ANTHROPIC_API_KEY is not set")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "No LLM API key is set (ANTHROPIC_API_KEY or OPENAI_API_KEY)",
+        )
 
     async def stream():
         try:

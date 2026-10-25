@@ -18,16 +18,14 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from anthropic import AsyncAnthropic
-
 from app.config import REPO_ROOT, Settings, get_settings, settings_with
 from app.db import engine
 from app.evals.corpus import document_ids_by_sha, load_corpus
 from app.evals.golden import GOLDEN_PATH
 from app.evals.golden_corpus import CORPUS_GOLDEN_PATH
-from app.evals.judge import Judge
+from app.evals.judge import make_judge
 from app.evals.matching import first_hit
-from app.generation.generator import ClaudeGenerator
+from app.generation.generator import make_generator
 from app.generation.service import answer_events
 from app.models import DocumentStatus
 from app.retrieval.retriever import RetrievalResult, Retriever
@@ -97,12 +95,9 @@ async def evaluate(
     retriever = Retriever.from_settings(engine, s)
     generator = judge = None
     if answer_limit:
-        key = s.anthropic_api_key.get_secret_value() if s.anthropic_api_key else ""
-        if not key:
-            raise SystemExit("--answers needs ANTHROPIC_API_KEY")
-        client = AsyncAnthropic(api_key=key)
-        generator = ClaudeGenerator(client, s)
-        judge = Judge(client, s.judge_model)
+        generator, judge = make_generator(s), make_judge(s)
+        if generator is None or judge is None:
+            raise SystemExit("--answers needs ANTHROPIC_API_KEY or OPENAI_API_KEY")
 
     sem = asyncio.Semaphore(concurrency)
     done_count = 0
@@ -182,6 +177,8 @@ async def evaluate(
     rows = await asyncio.gather(*(one(i, g) for i, g in enumerate(golden)))
     log("all questions done")
     summary = summarize(rows, s.abstain_min_relevance)
+    if "answers" in summary:
+        summary["answers"]["models"] = {"answer": s.llm_model, "judge": s.judge_model}
     summary["elapsed_s"] = round(time.perf_counter() - started, 1)
     return rows, summary
 

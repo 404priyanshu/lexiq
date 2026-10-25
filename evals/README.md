@@ -74,6 +74,12 @@ uv run python -m app.evals.run --answers 100      # + generation and LLM judge o
 uv run python -m app.evals.gate ../../evals/runs/<run>/summary.json
 ```
 
+The answer metrics need `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; the same provider writes and
+grades the answers (`summary.json` records both models under `answers.models`). With
+`gpt-4.1-mini`, generation plus judging costs roughly $0.004 per question, about $0.40 for
+`--answers 100`. A model grading its own answers can be lenient, so treat faithfulness from a
+same-model judge as an upper bound.
+
 To score a configuration without editing code, override any `Settings` field for one run:
 
 ```bash

@@ -46,8 +46,9 @@ class QueryCache:
             settings.route_min_identity_words, EMBEDDER.revision, RERANKER.revision,
         )  # fmt: skip
         self.answer_config = _fingerprint(
-            self.retrieval_config, settings.llm_model, settings.llm_effort, SYSTEM_PROMPT
-        )
+            self.retrieval_config, settings.llm_provider, settings.llm_model,
+            settings.llm_effort, settings.openai_reasoning_effort, SYSTEM_PROMPT,
+        )  # fmt: skip
 
     async def _key(
         self, kind: str, config: str, query: str, top_k: int | None, document_ids

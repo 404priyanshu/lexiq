@@ -30,7 +30,7 @@ flowchart LR
     X -. names a document .-> RT[Stage 2: search that document with the names removed] --> G
     B & D --> F[RRF fusion] --> X[int8 cross-encoder rerank]
     X -->|best passage irrelevant| A1[Abstain]
-    X --> G[Claude: numbered sources, cite every claim] -->|SSE| UI[Web UI with citation chips]
+    X --> G[LLM: numbered sources, cite every claim] -->|SSE| UI[Web UI with citation chips]
     G -->|sources insufficient| A1
   end
   DB --> B & D
@@ -40,8 +40,9 @@ flowchart LR
   at pages, strips running headers and footers, and chunks by embedder tokens with overlap.
 - **Retrieval** runs BM25 and dense search in parallel, fuses them with Reciprocal Rank
   Fusion, and reranks the top 10 with a local int8 cross-encoder: no per-query API cost.
-- **Generation** gives Claude numbered passages and requires a `[n]` citation on every factual
-  sentence; citations are validated afterwards. Answers stream over server-sent events.
+- **Generation** gives the model numbered passages and requires a `[n]` citation on every
+  factual sentence; citations are validated afterwards. Answers stream over server-sent events.
+  Claude or an OpenAI model, whichever key is set (`LLM_PROVIDER` picks when both are).
 - **Two-stage retrieval** handles corpus-wide questions that name a document ("In the Supply
   Agreement between Acme and Globex, ..."): stage 1 finds the document, stage 2 searches it
   with the identifying words removed, so the preamble that repeats the names doesn't crowd out
@@ -59,7 +60,8 @@ flowchart LR
 
 ## Run locally
 
-Requires Docker, [uv](https://docs.astral.sh/uv/), pnpm, and an `ANTHROPIC_API_KEY` in `.env`.
+Requires Docker, [uv](https://docs.astral.sh/uv/), pnpm, and an `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` in `.env` for answers (search works without one).
 
 ```bash
 make setup         # .env, deps, ONNX models, containers, migrations
@@ -173,7 +175,7 @@ Index size at 52k pages: 341 MB of chunk rows, 237 MB HNSW index, 84 MB BM25 ind
 
 Anthropic prompt caching isn't used: the system prompt is below the minimum cacheable length
 and the sources differ per question. End-to-end answer latency, $/query and the LLM-judged
-answer metrics need `ANTHROPIC_API_KEY` and haven't been measured yet.
+answer metrics need an LLM API key and haven't been measured yet.
 
 ## Data
 

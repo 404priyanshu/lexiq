@@ -1,9 +1,13 @@
 """LLM judge for generated answers: faithfulness to the given sources, and whether the answer
 addresses the question in line with CUAD's reference evidence."""
 
+from typing import Protocol
+
 from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
+from app.config import Settings
 from app.generation.generator import FALLBACK_BETA
 from app.generation.prompt import build_user_message
 from app.retrieval.retriever import RetrievedChunk
@@ -43,7 +47,29 @@ def build_judge_message(
     )
 
 
-class Judge:
+class Judge(Protocol):
+    async def grade(
+        self, question: str, sources: list[RetrievedChunk], answer: str, evidence: list[str]
+    ) -> tuple[Verdict | None, dict]:
+        """Returns (verdict or None if the judge refused, token usage)."""
+        ...
+
+
+def make_judge(settings: Settings) -> Judge | None:
+    """The configured provider's judge, or None when its API key isn't set."""
+    key = settings.llm_api_key()
+    if not key:
+        return None
+    if settings.llm_provider == "openai":
+        return OpenAIJudge(AsyncOpenAI(api_key=key), settings.judge_model)
+    return ClaudeJudge(AsyncAnthropic(api_key=key), settings.judge_model)
+
+
+def _messages(question, sources, answer, evidence) -> list[dict]:
+    return [{"role": "user", "content": build_judge_message(question, sources, answer, evidence)}]
+
+
+class ClaudeJudge:
     def __init__(self, client: AsyncAnthropic, model: str):
         self.client = client
         self.model = model
@@ -51,17 +77,11 @@ class Judge:
     async def grade(
         self, question: str, sources: list[RetrievedChunk], answer: str, evidence: list[str]
     ) -> tuple[Verdict | None, dict]:
-        """Returns (verdict or None if the judge refused, token usage)."""
         response = await self.client.beta.messages.parse(
             model=self.model,
             max_tokens=16000,
             system=JUDGE_SYSTEM,
-            messages=[
-                {
-                    "role": "user",
-                    "content": build_judge_message(question, sources, answer, evidence),
-                }
-            ],
+            messages=_messages(question, sources, answer, evidence),
             output_format=Verdict,
             betas=[FALLBACK_BETA],
             fallbacks="default",
@@ -73,3 +93,31 @@ class Judge:
         if response.stop_reason == "refusal":
             return None, usage
         return response.parsed_output, usage
+
+
+class OpenAIJudge:
+    def __init__(self, client: AsyncOpenAI, model: str):
+        self.client = client
+        self.model = model
+
+    async def grade(
+        self, question: str, sources: list[RetrievedChunk], answer: str, evidence: list[str]
+    ) -> tuple[Verdict | None, dict]:
+        # Structured outputs: the reply is constrained to Verdict's JSON schema.
+        completion = await self.client.chat.completions.parse(
+            model=self.model,
+            max_completion_tokens=4000,
+            messages=[
+                {"role": "system", "content": JUDGE_SYSTEM},
+                *_messages(question, sources, answer, evidence),
+            ],
+            response_format=Verdict,
+        )
+        usage = {
+            "input_tokens": completion.usage.prompt_tokens if completion.usage else 0,
+            "output_tokens": completion.usage.completion_tokens if completion.usage else 0,
+        }
+        message = completion.choices[0].message
+        if message.refusal or message.parsed is None:
+            return None, usage
+        return message.parsed, usage
