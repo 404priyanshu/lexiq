@@ -37,7 +37,8 @@ flowchart LR
 ```
 
 - **Ingestion** keeps real page boundaries (PDF pages, HTML print breaks) so citations point
-  at pages, strips running headers and footers, and chunks by embedder tokens with overlap.
+  at pages, reads two-column pages (the CFR's layout) column by column, strips running
+  headers and footers, and chunks by embedder tokens with overlap.
 - **Retrieval** runs BM25 and dense search in parallel, fuses them with Reciprocal Rank
   Fusion, and reranks the top 10 with a local int8 cross-encoder: no per-query API cost.
 - **Generation** gives the model numbered passages and requires a `[n]` citation on every

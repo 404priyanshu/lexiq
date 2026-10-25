@@ -5,6 +5,7 @@ ready or failed. Needs the worker running (`make worker`).
 Usage:
   uv run python -m app.ingest.bulk cuad              # all 510 CUAD contracts
   uv run python -m app.ingest.bulk cfr               # volumes in corpora/cfr-2025.json
+  uv run python -m app.ingest.bulk cfr --reingest    # re-parse loaded ones (parser change)
 """
 
 import argparse
@@ -16,7 +17,7 @@ from pathlib import Path
 
 from arq import create_pool
 from arq.connections import RedisSettings
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.config import REPO_ROOT, get_settings
 from app.db import SessionLocal, engine
@@ -39,7 +40,11 @@ def cfr_files(manifest: Path) -> list[tuple[Path, str, str | None]]:
     return [(CFR_DIR / d["file"], d["name"], d["url"]) for d in docs]
 
 
-async def enqueue(files: list[tuple[Path, str, str | None]]) -> list[uuid.UUID]:
+async def enqueue(
+    files: list[tuple[Path, str, str | None]], reingest: bool = False
+) -> list[uuid.UUID]:
+    """Register each file and queue the new (or failed) documents. With `reingest`, documents
+    already loaded are queued again too, so a parser or chunker change reaches them."""
     redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
     ids, queued = [], 0
     try:
@@ -53,7 +58,16 @@ async def enqueue(files: list[tuple[Path, str, str | None]]) -> list[uuid.UUID]:
                     source_uri=source_uri,
                 )
             ids.append(doc.id)
-            if created or doc.status == DocumentStatus.failed:
+            if reingest and not created and doc.id not in ids[:-1]:
+                # Pending first, so wait() doesn't count it as done before the job runs.
+                async with SessionLocal() as session:
+                    await session.execute(
+                        update(Document)
+                        .where(Document.id == doc.id)
+                        .values(status=DocumentStatus.pending, error=None)
+                    )
+                    await session.commit()
+            if created or reingest or doc.status == DocumentStatus.failed:
                 await redis.enqueue_job(INGEST_JOB, str(doc.id), _job_id=ingest_job_id(doc.id))
                 queued += 1
     finally:
@@ -118,6 +132,9 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=REPO_ROOT / "corpora/cfr-2025.json")
     parser.add_argument("--no-wait", action="store_true")
     parser.add_argument(
+        "--reingest", action="store_true", help="also re-parse documents already loaded"
+    )
+    parser.add_argument(
         "--timeout", type=float, default=4 * 3600, help="give up waiting after this many seconds"
     )
     args = parser.parse_args()
@@ -126,7 +143,7 @@ def main() -> None:
 
     async def run():
         try:
-            ids = await enqueue(files)
+            ids = await enqueue(files, reingest=args.reingest)
             if not args.no_wait:
                 await wait(ids, max_wait_s=args.timeout)
         finally:

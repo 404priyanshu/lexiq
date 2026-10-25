@@ -56,7 +56,7 @@ All off by default, so local development is unchanged; the demo's `.env` turns t
    `python -m app.demo warm` caches their answers, so clicking one is instant and free.
 5. **Deployment files** in `infra/demo`: Dockerfiles for the API (models baked in, 2.1 GB) and
    web app (Next.js standalone, 293 MB), `compose.yml`, `Caddyfile`, `.env.example`,
-   `deploy.sh`, and `restore-index.sh`; `make demo-dump` writes the 298 MB index dump.
+   `deploy.sh`, and `restore-index.sh`; `make demo-dump` writes the 280 MB index dump.
 6. **Attribution footer** for CUAD and the CFR, plus a note that answers can be wrong.
 
 Rehearsed locally with the production compose file (`DOMAIN=localhost`): the dump restored and
@@ -70,7 +70,7 @@ now fixed.
 On your machine:
 
 ```bash
-make demo-dump        # data/demo-index.dump (298 MB)
+make demo-dump        # data/demo-index.dump (280 MB)
 scp data/demo-index.dump root@SERVER:/root/
 ```
 
@@ -129,11 +129,10 @@ graded run on the golden set (~$0.10) would settle that before switching.
 
 ## Risks
 
-- **Scrambled CFR excerpts:** CFR volumes are printed in two columns and the PDF parser reads
-  straight across them, so regulation passages interleave mid-sentence ("Compliance with tain
-  these records..."). Retrieval and answers mostly cope, but the source excerpts a visitor
-  expands look broken. Column-aware parsing (PyMuPDF block sorting) and a re-ingest of the CFR
-  volumes would fix it; worth doing before sharing the URL widely.
+- **Scrambled CFR excerpts (fixed):** CFR volumes are printed in two columns, and sorting
+  text blocks by position spliced the columns together mid-sentence. The PDF parser now reads
+  two-column bands column by column; only pages with substantial text on both sides change,
+  so 7 of 9,429 contract pages (all tables) are affected and 98.7% of CFR pages are.
 - **Slower hardware:** retrieval is 0.2 s on an M5 Pro; on 4 shared vCPUs expect 2–3× that.
   The step-4 benchmark measures it. If it's too slow, a larger CAX/CX size is the safe fix;
   fewer rerank candidates would need its own eval run (10 vs 30 cost 0.003 recall@5, but
