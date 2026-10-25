@@ -121,6 +121,17 @@ def test_answer_summary_counts_judge_declines_as_abstains():
     assert s["abstain_precision"] == pytest.approx(2 / 3, abs=1e-4)
 
 
+def test_answer_summary_leaves_failed_generations_out_of_the_metrics():
+    rows = [
+        gen_row(True),
+        gen_row(False, abstained=True),
+        {"answerable": True, "generation": {"error": "rate limited"}},
+    ]
+    s = summarize_answers(rows)
+    assert (s["n"], s["errors"]) == (2, 1)
+    assert s["answer_correctness"] == 1.0 and s["abstain_recall"] == 1.0
+
+
 def test_answer_summary_separates_declines_the_sources_justified():
     rows = [
         gen_row(True, evidence=True),

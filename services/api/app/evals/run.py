@@ -162,7 +162,13 @@ async def evaluate(
                 )
             ]
         sources = res.chunks[: s.top_k]
-        done = next(data for name, data in events if name == "done")
+        done = next((data for name, data in events if name == "done"), None)
+        if done is None:
+            # Generation failed after the SDK's own retries; keep the run going and leave this
+            # question out of the answer metrics rather than scoring it as wrong.
+            error = next((data for name, data in events if name == "error"), {})
+            log(f"generation failed for {g['id']}: {error.get('message')}")
+            return {"error": error.get("message", "no done event")}
         out = {
             "answer": done["answer"],
             "abstained": done["abstained"],
@@ -253,6 +259,8 @@ def _rate(items: list, pred) -> float | None:
 
 
 def summarize_answers(rows: list[dict]) -> dict:
+    errors = sum(1 for r in rows if "error" in r["generation"])
+    rows = [r for r in rows if "error" not in r["generation"]]
     gens = [r["generation"] for r in rows]
     judged = [g["judge"] for g in gens if g.get("judge")]
     cited = [g["citations"] for g in gens if g["citations"]]
@@ -271,6 +279,7 @@ def summarize_answers(rows: list[dict]) -> dict:
 
     return {
         "n": len(rows),
+        "errors": errors,
         "faithfulness": _rate(judged, lambda j: j["faithful"]),
         "answer_correctness": _rate([r for r in rows if r["answerable"]], correct),
         "abstain_precision": _rate(

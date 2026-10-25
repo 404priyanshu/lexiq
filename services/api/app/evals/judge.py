@@ -117,7 +117,7 @@ class OpenAIJudge:
             "input_tokens": completion.usage.prompt_tokens if completion.usage else 0,
             "output_tokens": completion.usage.completion_tokens if completion.usage else 0,
         }
-        message = completion.choices[0].message
-        if message.refusal or message.parsed is None:
+        message = completion.choices[0].message if completion.choices else None
+        if message is None or message.refusal or message.parsed is None:
             return None, usage
         return message.parsed, usage

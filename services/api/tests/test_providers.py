@@ -194,3 +194,11 @@ async def test_openai_judge_refusal_is_no_verdict():
     completions = FakeCompletions(parsed=parsed_completion(None, refusal="No."))
     got, _ = await OpenAIJudge(FakeOpenAI(completions), "gpt-4.1-mini").grade("q", SOURCES, "a", [])
     assert got is None
+
+
+async def test_openai_judge_with_no_choices_is_no_verdict():
+    empty = parsed_completion(None).model_copy(update={"choices": []})
+    got, usage = await OpenAIJudge(FakeOpenAI(FakeCompletions(parsed=empty)), "m").grade(
+        "q", SOURCES, "a", []
+    )
+    assert got is None and usage["input_tokens"] == 900
