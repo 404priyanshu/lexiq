@@ -83,7 +83,9 @@ def test_retrieval_summary_recall_mrr_and_abstain_rates():
     assert s["retrieval_abstain"]["unanswerable_abstain_rate"] == 1.0
 
 
-def gen_row(answerable, *, abstained=False, faithful=True, correct=True, declined=False):
+def gen_row(
+    answerable, *, abstained=False, faithful=True, correct=True, declined=False, evidence=None
+):
     judge = None
     if not abstained:
         judge = {"faithful": faithful, "unsupported_claims": [], "answers_question": correct,
@@ -98,7 +100,8 @@ def gen_row(answerable, *, abstained=False, faithful=True, correct=True, decline
             "usage": {"input_tokens": 1000, "output_tokens": 50},
             "total_ms": 1500.0,
             "judge": judge,
-        },
+        }
+        | ({"evidence_in_sources": evidence} if evidence is not None else {}),
     }
 
 
@@ -116,6 +119,17 @@ def test_answer_summary_counts_judge_declines_as_abstains():
     assert s["answer_correctness"] == pytest.approx(1 / 3, abs=1e-4)
     assert s["abstain_recall"] == 1.0
     assert s["abstain_precision"] == pytest.approx(2 / 3, abs=1e-4)
+
+
+def test_answer_summary_separates_declines_the_sources_justified():
+    rows = [
+        gen_row(True, evidence=True),
+        gen_row(True, abstained=True, evidence=True),  # model error: clause was in the sources
+        gen_row(True, abstained=True, evidence=False),  # retrieval miss: declining was right
+        gen_row(False, abstained=True),
+    ]
+    s = summarize_answers(rows)["given_evidence"]
+    assert s == {"n": 2, "false_abstain_rate": 0.5, "answer_correctness": 0.5}
 
 
 # --- gate --------------------------------------------------------------------------------

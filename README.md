@@ -204,7 +204,23 @@ Judged on the first 100 golden questions (81 answerable, 19 unanswerable), with
 
 A model grading its own answers can be lenient, so faithfulness is best read as an upper
 bound. Abstaining is the weak spot: the model declined 10 answerable questions and answered 6
-that CUAD marks as having no such clause. The run cost $0.29 ($0.16 answers, $0.13 judging).
+that CUAD marks as having no such clause.
+
+Tuning the declines, on questions 100–199 with 0–99 held out for confirmation:
+
+- About half of the wrong declines aren't model errors: the gold clause never reached the
+  model (missed by retrieval, or ranked 9th–10th of the 8 passages sent). Declining was right.
+  The eval now reports this split as `answers.given_evidence`. With the clause in front of it,
+  `gpt-4.1-mini` wrongly declined 3 of 68 tuning questions.
+- Stricter decline wording in the prompt (decide relevance first, don't recast unrelated
+  provisions) changed nothing: the same 3 wrong declines and 6 missed ones.
+- Sending all 10 reranked passages instead of 8 raised answer correctness (tuning 0.816 →
+  0.874, held-out 0.852 → 0.877), but on held-out questions the model also answered more that
+  have no such clause (13 → 10 of 19 correctly declined). A confident wrong answer is worse
+  than a wrong decline here, and the differences are 2–3 questions, so `top_k` stays at 8.
+- Several remaining "missed" declines are label disagreements: asked when the initial term
+  ends, the model answers "two years from November 15, 2012", where CUAD marks the contract as
+  having no expiration-date clause. The run cost $0.29 ($0.16 answers, $0.13 judging).
 These are the answer baselines in `evals/baseline.json`; CI gates on them only when a key is
 configured, and doesn't have one.
 

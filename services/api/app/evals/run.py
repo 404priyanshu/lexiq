@@ -7,6 +7,7 @@ generation and the LLM judge.
 Usage:
   uv run python -m app.evals.run                    # retrieval, all 500 questions
   uv run python -m app.evals.run --answers 100      # + generation and judge on 100
+  uv run python -m app.evals.run --answers 100 --answers-from 100   # tuning slice
 """
 
 import argparse
@@ -75,6 +76,7 @@ async def evaluate(
     limit: int | None = None,
     settings: Settings | None = None,
     scope: str = "document",
+    answer_offset: int = 0,
 ) -> tuple[list[dict], dict]:
     """scope="document": golden questions, retrieval restricted to their contract.
     scope="corpus": contract-named questions, retrieval over every document.
@@ -142,8 +144,13 @@ async def evaluate(
                 row["doc_rank"] = next(
                     (i for i, c in enumerate(res.chunks, start=1) if c.document_id == target), None
                 )
-        if generator and i < answer_limit:
+        if generator and answer_offset <= i < answer_offset + answer_limit:
             row["generation"] = await generate_and_judge(g, res)
+            if g["answerable"]:
+                # Was the gold clause among the passages the model saw? Declining is the right
+                # call when it wasn't, so this separates model errors from retrieval misses.
+                rank = row["rank"]["rerank"]
+                row["generation"]["evidence_in_sources"] = rank is not None and rank <= s.top_k
         return row
 
     async def generate_and_judge(g: dict, res: RetrievalResult) -> dict:
@@ -179,6 +186,7 @@ async def evaluate(
     summary = summarize(rows, s.abstain_min_relevance)
     if "answers" in summary:
         summary["answers"]["models"] = {"answer": s.llm_model, "judge": s.judge_model}
+        summary["answers"]["questions"] = [answer_offset, answer_offset + answer_limit]
     summary["elapsed_s"] = round(time.perf_counter() - started, 1)
     return rows, summary
 
@@ -259,6 +267,8 @@ def summarize_answers(rows: list[dict]) -> dict:
         j = r["generation"].get("judge")
         return bool(j and j["answers_question"] and not j["declined"])
 
+    given_evidence = [r for r in rows if r["generation"].get("evidence_in_sources")]
+
     return {
         "n": len(rows),
         "faithfulness": _rate(judged, lambda j: j["faithful"]),
@@ -267,6 +277,12 @@ def summarize_answers(rows: list[dict]) -> dict:
             [r for r in rows if abstained(r)], lambda r: not r["answerable"]
         ),
         "abstain_recall": _rate([r for r in rows if not r["answerable"]], abstained),
+        # Answerable questions whose gold clause was in the sources the model saw.
+        "given_evidence": {
+            "n": len(given_evidence),
+            "false_abstain_rate": _rate(given_evidence, abstained),
+            "answer_correctness": _rate(given_evidence, correct),
+        },
         "citation_valid_rate": _rate(cited, lambda c: not c["invalid"]),
         "citation_coverage": round(statistics.mean(c["coverage"] for c in cited), 4)
         if cited
@@ -311,6 +327,10 @@ def print_summary(summary: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--answers", type=int, default=0, metavar="N")
+    parser.add_argument(
+        "--answers-from", type=int, default=0, metavar="I",
+        help="answer questions I..I+N-1 instead of the first N (e.g. a held-out tuning slice)",
+    )  # fmt: skip
     parser.add_argument("--concurrency", type=int, default=2)
     parser.add_argument("--limit", type=int, default=None, help="only the first N questions")
     parser.add_argument(
@@ -329,7 +349,10 @@ def main() -> None:
 
     async def run():
         try:
-            return await evaluate(args.answers, args.concurrency, args.limit, settings, args.scope)
+            return await evaluate(
+                args.answers, args.concurrency, args.limit, settings, args.scope,
+                args.answers_from,
+            )  # fmt: skip
         finally:
             await engine.dispose()
 
