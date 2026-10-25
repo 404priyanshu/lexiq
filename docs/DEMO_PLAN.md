@@ -85,8 +85,7 @@ cp .env.example .env && nano .env     # DOMAIN, POSTGRES_PASSWORD, OPENAI_API_KE
 ./restore-index.sh /root/demo-index.dump
 ```
 
-The repository is private, so the server needs read access to clone it (a deploy key, or
-make the repository public). Updates later: `./deploy.sh` again; after a corpus change, a new
+The repository is public, so the server clones it without credentials. Updates later: `./deploy.sh` again; after a corpus change, a new
 dump and `./restore-index.sh`.
 
 ## Hardening
@@ -118,7 +117,7 @@ graded run on the golden set (~$0.10) would settle that before switching.
 3. Provision over SSH: Docker, firewall, secrets in a server-side `.env`, deploy script.
 4. Restore the index dump, warm the example questions, run `make bench` against the server
    to confirm latency.
-5. Add the URL to the README and your resume.
+5. Add the URL to the README.
 
 ## Decisions for you
 
