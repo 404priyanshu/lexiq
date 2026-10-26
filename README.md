@@ -7,7 +7,7 @@ evidence is insufficient. Every retrieval and prompt change is scored against a
 
 | | |
 |---|---|
-| Corpus | **52,650 pages** (561 documents, 124,353 chunks): all 510 CUAD contracts + 51 volumes of federal regulations |
+| Corpus | **52,650 pages** (561 documents, 118,785 chunks): all 510 CUAD contracts + 51 volumes of federal regulations |
 | Retrieval quality | recall@5 **0.762** within a contract; **0.729** across all 52k pages with two-stage retrieval (up from 0.338) ([details](#whole-corpus-quality)) |
 | Retrieval latency | **179 / 188 ms** p50 / p95 per request at 52k pages; <1 ms on a cache hit |
 | CI | lint, 82 tests, web build, and a golden-set gate that fails on regression |
